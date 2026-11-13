@@ -27,9 +27,7 @@
 		return web + '/apps/edithstudio/?play=' + encodeURIComponent(node.path);
 	}
 
-	window._nc_fileactions = window._nc_fileactions || [];
-	if (window._nc_fileactions.some(function (x) { return x.id === 'edithstudio-open'; })) { return; }
-	window._nc_fileactions.push({
+	var action = {
 		id: 'edithstudio-open',
 		displayName: function () { return 'Apri con EDITH Studio'; },
 		title: function () { return 'Apri questo brano nel player di EDITH Studio'; },
@@ -43,5 +41,18 @@
 			if (node && node.path) { window.location.href = urlFor(node); }
 			return Promise.resolve(null);
 		}
-	});
+	};
+
+	/* Nextcloud recente (33+): registro "v4" di Files, una Map id -> azione.
+	   Versioni piu' vecchie: elenco window._nc_fileactions. */
+	var scope = window._nc_files_scope = window._nc_files_scope || {};
+	var v4s = scope.v4_0 = scope.v4_0 || {};
+	if (v4s.fileActions === undefined && 'Map' in window) { v4s.fileActions = new Map(); }
+	var v4 = v4s.fileActions;
+	if (v4 && typeof v4.set === 'function') {
+		if (!v4.has(action.id)) { v4.set(action.id, action); }
+	} else {
+		window._nc_fileactions = window._nc_fileactions || [];
+		if (!window._nc_fileactions.some(function (x) { return x.id === action.id; })) { window._nc_fileactions.push(action); }
+	}
 })();

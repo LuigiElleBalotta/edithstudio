@@ -417,7 +417,7 @@
 			if (!t) { return; }
 			Mixer.pause();
 			audio.src = fileUrl(t.path);
-			if (play) { audio.play().catch(function () { msg = 'Il browser non riesce a riprodurre questo file.'; draw(); }); }
+			if (play) { audio.play().catch(function (er) { msg = (er && er.name === 'NotAllowedError') ? 'Il browser non fa partire l\'audio da solo: premi ▶.' : 'Il browser non riesce a riprodurre questo file.'; draw(); if (er && er.name === 'NotAllowedError') { toast('Premi ▶ per avviare il brano (il browser non permette l\'avvio automatico).'); } }); }
 			media();
 			draw();
 			Lib.draw();
