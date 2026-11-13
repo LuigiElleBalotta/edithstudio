@@ -17,3 +17,27 @@ Copia la cartella in `custom_apps/edithstudio` e abilita l'app (`occ app:enable 
 - Tag e copertine, playlist, salvataggio delle sessioni del mixer.
 
 Licenza: AGPL-3.0-or-later.
+
+## Condivisione (solo ascolto)
+
+Un link di condivisione normale di Nextcloud (`/s/<codice>`) che punta a **un solo file audio** si apre su EDITH Studio:
+un player pulito con copertina, barra e volume. Chi lo apre senza account **non vede cartelle e non può navigare**.
+Password, scadenza e permessi restano quelli della condivisione di Nextcloud. Le cartelle condivise e i file non audio
+restano sulla pagina standard di Nextcloud.
+
+Il link si crea da Files (Condividi) oppure da Studio col pulsante 🔗 (crea o riusa un link di sola lettura).
+
+**Proxy:** perché si possa saltare avanti nei brani lunghi, il proxy davanti a Nextcloud deve lasciar passare le richieste
+parziali (`Range`). Con nginx: niente `proxy_cache` sul sito di Nextcloud (`proxy_cache off;` nel blocco `location`).
+
+## Tastiera
+
+Player: Spazio play/pausa, ← → ±5 s (Maiusc ±30), J/L ±10 s, ↑ ↓ volume, M muto, N/P brano dopo/prima, S casuale,
+R ripeti, Q coda, 0-9 salta, Invio schermo intero, Esc chiude, ? aiuto.
+Mixer: Spazio, ← → ±5 s (Maiusc ±15), J −10 s, Home/End, L ripeti, 1-9 muta traccia (Maiusc = solo), Esc.
+
+## Menu del tasto destro
+
+Su file e cartelle (e col pulsante ⋯, o pressione lunga sul telefono): Riproduci, Riproduci dopo, Aggiungi alla sessione
+di studio, Scarica, Copia link di ascolto, Mostra in Files, Rinomina, Elimina. L'eliminazione va nel **Cestino** di
+Nextcloud e chiede sempre conferma.

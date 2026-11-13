@@ -6,7 +6,7 @@ body {
 		linear-gradient(rgba(95, 216, 242, 0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(95, 216, 242, 0.045) 1px, transparent 1px);
 	background-size: auto, auto, 38px 38px, 38px 38px; background-attachment: fixed;
 }
-#edithstudio-public { min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+#edithstudio-public { min-height: 100vh; width: 100%; flex: 1 1 100%; display: flex; align-items: center; justify-content: center; }
 #edithstudio-public .ep-wrap { margin: 0 auto; width: 100%; max-width: 440px; padding: 24px 16px; box-sizing: border-box; position: static; }
 #edithstudio-public .ep-card {
 	background: rgba(12, 26, 46, 0.86); border: 1px solid rgba(80, 200, 235, 0.28); border-radius: 18px; padding: 24px 22px 20px;
