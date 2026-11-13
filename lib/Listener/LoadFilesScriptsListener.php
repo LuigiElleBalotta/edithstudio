@@ -21,6 +21,6 @@ class LoadFilesScriptsListener implements IEventListener {
 		if (!($event instanceof LoadAdditionalScriptsEvent)) {
 			return;
 		}
-		Util::addInitScript(Application::APP_ID, 'files-action');
+		Util::addInitScript(Application::APP_ID, 'files-open');
 	}
 }

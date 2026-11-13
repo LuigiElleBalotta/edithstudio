@@ -38,10 +38,46 @@
 		enabled: function (a) { return loggedIn() && isAudio(firstNode(a)); },
 		exec: function (a) {
 			var node = a && a.nodes ? a.nodes[0] : (Array.isArray(a) ? a[0] : a);
-			if (node && node.path) { window.location.href = urlFor(node); }
+			if (node && node.path) { openOverlay(node); }
 			return Promise.resolve(null);
 		}
 	};
+
+	/* Studio si apre SOPRA la pagina dei File, dentro la stessa scheda: cosi' il clic dell'utente vale anche per l'audio
+	   e il brano parte da solo (un cambio di pagina farebbe bloccare l'avvio automatico dal browser). */
+	function openOverlay(node) {
+		var old = document.getElementById('edithstudio-overlay');
+		if (old) { old.remove(); }
+		var ov = document.createElement('div');
+		ov.id = 'edithstudio-overlay';
+		ov.setAttribute('style', 'position:fixed;inset:0;z-index:100000;background:#050b17;');
+		var fr = document.createElement('iframe');
+		fr.setAttribute('allow', 'autoplay; fullscreen');
+		fr.setAttribute('title', 'EDITH Studio');
+		fr.setAttribute('style', 'width:100%;height:100%;border:0;display:block;');
+		fr.src = urlFor(node) + '&embed=1';
+		function btn(label, title, right, fn) {
+			var b = document.createElement('button');
+			b.type = 'button'; b.textContent = label; b.title = title;
+			b.setAttribute('style', 'position:absolute;top:10px;right:' + right + 'px;z-index:2;height:36px;min-width:36px;padding:0 12px;border-radius:999px;' +
+				'border:1px solid rgba(80,200,235,.45);background:rgba(10,22,40,.92);color:#e6f1fa;font:14px system-ui,sans-serif;cursor:pointer;');
+			b.addEventListener('click', fn);
+			return b;
+		}
+		function close() { document.removeEventListener('keydown', onKey, true); ov.remove(); document.body.style.overflow = ''; }
+		function onKey(e) { if (e.key === 'Escape' && !e.defaultPrevented) { close(); } }
+		ov.appendChild(fr);
+		ov.appendChild(btn('✕ Chiudi', 'Chiudi EDITH Studio e torna ai file', 12, close));
+		ov.appendChild(btn('↗', 'Apri Studio a pagina intera', 118, function () { window.location.href = urlFor(node); }));
+		document.body.appendChild(ov);
+		document.body.style.overflow = 'hidden';
+		document.addEventListener('keydown', onKey, true);
+		/* Esc premuto dentro Studio (nell'iframe) */
+		window.addEventListener('message', function onMsg(e) {
+			if (e.origin === window.location.origin && e.data === 'edithstudio-close') { window.removeEventListener('message', onMsg); close(); }
+		});
+		try { fr.addEventListener('load', function () { try { fr.contentWindow.focus(); } catch (er) { /* niente */ } }); } catch (er2) { /* niente */ }
+	}
 
 	/* Nextcloud recente (33+): registro "v4" di Files, una Map id -> azione.
 	   Versioni piu' vecchie: elenco window._nc_fileactions. */

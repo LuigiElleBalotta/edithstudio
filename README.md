@@ -45,3 +45,5 @@ Nextcloud e chiede sempre conferma.
 ## Apri dai File
 
 Nell'app File un clic su un file audio lo apre nel player di EDITH Studio (azione predefinita, priorita' piu' alta di quella di Music). Resta nel menu anche come "Apri con EDITH Studio".
+
+Nota: dai File lo Studio si apre in una finestra sopra la pagina (iframe con `?embed=1`), cosi' il clic vale anche per l'audio e il brano parte da solo; `Esc` o "Chiudi" tornano ai file, "↗" apre la pagina intera.

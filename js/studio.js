@@ -1249,6 +1249,14 @@
 		return { close: close };
 	})();
 
+	/* aperto dentro la pagina dei File (finestra sovrapposta): nasconde la barra di Nextcloud e passa Esc alla pagina che lo contiene */
+	if (window.top !== window.self && /[?&]embed=1/.test(location.search)) {
+		document.documentElement.classList.add('es-embed');
+		document.addEventListener('keydown', function (e) {
+			if (e.key === 'Escape' && !e.defaultPrevented && !root.querySelector('.es-ctx, .es-dlg, #es-mixer:not(.es-hide), #es-np:not(.es-hide)')) { try { window.parent.postMessage('edithstudio-close', window.location.origin); } catch (er) { /* niente */ } }
+		});
+	}
+
 	/* ------------------------------------------------------------ avvio */
 	var deep = /[?&]play=([^&]+)/.exec(location.search);
 	if (deep) { try { Lib.openFile(decodeURIComponent(deep[1])); } catch (e) { Lib.start(); } } else { Lib.start(); }

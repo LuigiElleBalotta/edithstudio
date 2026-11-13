@@ -162,3 +162,10 @@ body.es-noscroll { overflow: hidden; }
 #edithstudio .es-dinput:focus { outline: none; border-color: var(--e-amber); box-shadow: 0 0 0 2px rgba(255, 138, 31, 0.25); }
 #edithstudio .es-dbtn { display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px; }
 #edithstudio .es-btn.danger { background: linear-gradient(180deg, #e0463c, #a01f17); border-color: rgba(255, 140, 130, 0.6); color: #fff; }
+
+/* Studio dentro la pagina dei File (finestra sovrapposta): niente barra di Nextcloud, tutta l'altezza, spazio per i pulsanti Chiudi */
+html.es-embed #header, html.es-embed #app-navigation-vue { display: none !important; }
+html.es-embed body, html.es-embed #content { margin: 0 !important; padding-top: 0 !important; }
+html.es-embed #content { height: 100vh !important; max-height: none !important; }
+html.es-embed #edithstudio { min-height: 100vh; }
+html.es-embed #edithstudio .es-top { padding-right: 230px; }
