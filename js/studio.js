@@ -49,6 +49,47 @@
 		toastTimer = setTimeout(function () { el.classList.remove('on'); }, 4500);
 	}
 
+	/* barre: la parte già fatta si colora seguendo la variabile --p (vedi player.css) */
+	function paintRange(el) {
+		if (!el || el.type !== 'range') { return; }
+		var mn = parseFloat(el.min || '0'), mx = parseFloat(el.max || '100'), v = parseFloat(el.value || '0');
+		el.style.setProperty('--p', (mx > mn ? Math.max(0, Math.min(100, (v - mn) / (mx - mn) * 100)) : 0) + '%');
+	}
+	function paintAll() { [].forEach.call(root.querySelectorAll('input[type=range]'), paintRange); }
+	root.addEventListener('input', function (e) { paintRange(e.target); }, true);
+	var paintQueued = false;
+	new MutationObserver(function () { if (!paintQueued) { paintQueued = true; requestAnimationFrame(function () { paintQueued = false; paintAll(); }); } }).observe(root, { childList: true, subtree: true });
+
+	/* Condividi: crea (o riusa) un link di condivisione NORMALE di Nextcloud in sola lettura. Aperto da chi non ha l'account,
+	   Nextcloud lo manda alla pagina pubblica di EDITH Studio: un solo brano, niente cartelle. Password e scadenza: dal menu Condividi di Files. */
+	function reqToken() {
+		var h = document.head && document.head.getAttribute('data-requesttoken');
+		return h || (window.OC && window.OC.requestToken) || '';
+	}
+	function ocs(method, query, body) {
+		var o = { method: method, credentials: 'same-origin', headers: { 'OCS-APIRequest': 'true', 'Accept': 'application/json', 'requesttoken': reqToken() } };
+		if (body) { o.headers['Content-Type'] = 'application/x-www-form-urlencoded'; o.body = body; }
+		return fetch(WEB + '/ocs/v2.php/apps/files_sharing/api/v1/shares' + (query || '') + (query ? '&' : '?') + 'format=json', o)
+			.then(function (r) { return r.json().then(function (j) { return { status: r.status, data: j && j.ocs ? j.ocs.data : null, meta: j && j.ocs ? j.ocs.meta : {} }; }); });
+	}
+	function copyText(t) {
+		if (navigator.clipboard && window.isSecureContext) { return navigator.clipboard.writeText(t).then(function () { return true; }, function () { return false; }); }
+		return Promise.resolve(false);
+	}
+	function shareFile(path) {
+		toast('Preparo il link…');
+		ocs('GET', '?path=' + encodeURIComponent(path) + '&reshares=false').then(function (r) {
+			var ex = Array.isArray(r.data) ? r.data.filter(function (s) { return s.share_type === 3 && s.url; })[0] : null;
+			if (ex) { return ex.url; }
+			return ocs('POST', '', 'shareType=3&permissions=1&path=' + encodeURIComponent(path)).then(function (c) {
+				if (c.data && c.data.url) { return c.data.url; }
+				throw new Error((c.meta && c.meta.message) || 'Non posso condividere questo file.');
+			});
+		}).then(function (url) {
+			return copyText(url).then(function (ok) { toast(ok ? 'Link copiato. Chi lo apre può solo ascoltare questo brano: ' + url : 'Link di ascolto: ' + url); });
+		}).catch(function (e) { toast(e && e.message ? e.message : 'Non sono riuscito a creare il link.'); });
+	}
+
 	/* copertina: immagine della cartella (cover.jpg…) oppure un disegno generato dal nome */
 	function art(name, cover, cls) {
 		if (cover) { return '<div class="es-art ' + (cls || '') + '"><img alt="" loading="lazy" src="' + esc(fileUrl(cover)) + '"></div>'; }
@@ -195,7 +236,8 @@
 		function row(f, i, group) {
 			var now = Player.currentPath() === f.path;
 			return '<li class="es-trk' + (now ? ' now' : '') + '" data-a="play" data-g="' + group + '" data-i="' + i + '"><span class="es-n">' + (now ? '♪' : (i + 1)) + '</span>' +
-				'<span class="es-name">' + esc(baseName(f.name)) + '</span><span class="es-size">' + esc(fmtSize(f.size)) + '</span></li>';
+				'<span class="es-name">' + esc(baseName(f.name)) + '</span><span class="es-size">' + esc(fmtSize(f.size)) + '</span>' +
+				'<button class="es-btn small es-share" data-a="share" data-g="' + group + '" data-i="' + i + '" title="Copia il link di ascolto (solo questo brano)">🔗</button></li>';
 		}
 
 		function draw() {
@@ -253,6 +295,9 @@
 				var vis = list.filter(function (f) { return matches(f.name); });
 				var f = vis[i];
 				if (f) { Player.playList(vis.map(function (x) { return toTrack(x, album); }), i, cover); }
+			} else if (act === 'share') {
+				var sl = listFor(a.getAttribute('data-g')).filter(function (f) { return matches(f.name); })[parseInt(a.getAttribute('data-i'), 10)];
+				if (sl) { shareFile(sl.path); }
 			} else if (act === 'playall' || act === 'shuffleall') {
 				var main = entries.filter(function (x) { return !x.dir; });
 				if (main.length) { Player.playList(main.map(function (x) { return toTrack(x, album); }), 0, cover, act === 'shuffleall'); }
@@ -354,7 +399,7 @@
 	var Player = (function () {
 		var audio = new Audio();
 		audio.preload = 'metadata';
-		var queue = [], qi = -1, repeat = false, shuffle = false, msg = '', cover = '';
+		var queue = [], qi = -1, repeat = false, shuffle = false, msg = '', cover = '', showQ = false, scrubP = false, scrubWas = false;
 
 		function cur() { return queue[qi] || null; }
 		function load(play) {
@@ -395,14 +440,17 @@
 			qi--; load(true);
 		}
 		function npOpen() { return !elNp.classList.contains('es-hide'); }
+		/* posizione attuale del brano, da 0 a 1000: i ridisegni (pausa, play) non devono riportare le barre a zero */
+		function frac1000() { return audio.duration ? Math.round(Math.max(0, Math.min(1, audio.currentTime / audio.duration)) * 1000) : 0; }
 
 		function draw() {
+			if (scrubP) { return; }
 			var t = cur();
 			if (!t) { elPlayer.classList.add('es-hide'); closeNp(); return; }
 			elPlayer.classList.remove('es-hide');
 			var title = baseName(t.name), sub = msg || t.folder || '';
 			elPlayer.innerHTML =
-				'<div class="es-mini-bar"><i id="es-mbar"></i></div><div class="es-mini-in">' +
+				'<div class="es-mini-bar"><i id="es-mbar" style="width:' + (frac1000() / 10) + '%"></i></div><div class="es-mini-in">' +
 				'<button class="es-mini-info" data-p="open">' + art(lastName(t.album || '') || title, cover, 'tiny') + '<span class="es-now"><b>' + esc(title) + '</b><small>' + esc(sub) + '</small></span></button>' +
 				'<div class="es-ctl"><button class="es-btn" data-p="prev" title="Precedente">⏮</button>' +
 				'<button class="es-btn pri" data-p="toggle" title="Play / pausa">' + (audio.paused ? '▶' : '⏸') + '</button>' +
@@ -416,17 +464,18 @@
 			var up = queue.slice(qi + 1, qi + 40);
 			elNp.innerHTML =
 				'<div class="es-sheet-h"><button class="es-btn" data-p="closenp" title="Chiudi">⌄</button><b>In riproduzione</b><span></span></div>' +
-				'<div class="es-np-body"><div class="es-np-main">' + art(lastName(t.album || '') || title, cover, 'huge') +
+				'<div class="es-np-body' + (showQ ? '' : ' one') + '"><div class="es-np-main">' + art(lastName(t.album || '') || title, cover, 'huge') +
 				'<div class="es-np-t"><h2>' + esc(title) + '</h2><p>' + esc(msg || t.folder || '') + '</p></div>' +
-				'<div class="es-seek"><span id="es-cur">' + fmt(audio.currentTime) + '</span><input type="range" id="es-seekr" min="0" max="1000" value="0"><span id="es-dur">' + fmt(audio.duration) + '</span></div>' +
+				'<div class="es-seek"><span id="es-cur">' + fmt(audio.currentTime) + '</span><input type="range" id="es-seekr" min="0" max="1000" value="' + frac1000() + '"><span id="es-dur">' + fmt(audio.duration) + '</span></div>' +
 				'<div class="es-npctl"><button class="es-btn' + (shuffle ? ' on' : '') + '" data-p="shuffle" title="Casuale">⤮</button><button class="es-btn" data-p="prev">⏮</button>' +
 				'<button class="es-btn pri big" data-p="toggle">' + (audio.paused ? '▶' : '⏸') + '</button><button class="es-btn" data-p="next">⏭</button>' +
-				'<button class="es-btn' + (repeat ? ' on' : '') + '" data-p="repeat" title="Ripeti">⟲</button></div>' +
+				'<button class="es-btn' + (repeat ? ' on' : '') + '" data-p="repeat" title="Ripeti">⟲</button>' +
+				'<button class="es-btn' + (showQ ? ' on' : '') + '" data-p="queue" title="Mostra o nascondi la coda (Q)">☰</button></div>' +
 				'<div class="es-npvol"><span>🔈</span><input type="range" id="es-volr" min="0" max="100" value="' + Math.round(audio.volume * 100) + '" title="Volume"></div>' +
-				'<button class="es-btn" data-p="study">🎚 Studia questo brano</button></div>' +
-				'<div class="es-np-q"><h3 class="es-h">Prossimi brani</h3>' + (up.length ? '<ol class="es-qlist">' + up.map(function (x, k) {
+				'<div class="es-npctl"><button class="es-btn" data-p="study" style="width:auto;border-radius:999px;padding:0 16px;font-size:14px">🎚 Studia questo brano</button><button class="es-btn" data-p="share" title="Copia il link di ascolto (solo questo brano)" style="width:auto;border-radius:999px;padding:0 16px;font-size:14px">🔗 Condividi</button></div></div>' +
+				(!showQ ? '</div>' : '<div class="es-np-q"><h3 class="es-h">Prossimi brani</h3>' + (up.length ? '<ol class="es-qlist">' + up.map(function (x, k) {
 					return '<li data-p="jump" data-i="' + (qi + 1 + k) + '"><span class="es-n">' + (k + 1) + '</span><span class="es-name">' + esc(baseName(x.name)) + '</span></li>';
-				}).join('') + '</ol>' : '<div class="es-empty">Questo è l\'ultimo brano della lista.</div>') + '</div></div>';
+				}).join('') + '</ol>' : '<div class="es-empty">Questo è l\'ultimo brano della lista.</div>') + '</div></div>');
 		}
 		function openNp() { if (!cur()) { return; } elNp.classList.remove('es-hide'); document.body.classList.add('es-noscroll'); drawNp(); }
 		function closeNp() { elNp.classList.add('es-hide'); document.body.classList.remove('es-noscroll'); }
@@ -439,10 +488,12 @@
 			else if (a === 'next') { next(); }
 			else if (a === 'prev') { prev(); }
 			else if (a === 'repeat') { repeat = !repeat; drawNp(); }
+			else if (a === 'queue') { showQ = !showQ; drawNp(); }
 			else if (a === 'shuffle') { shuffle = !shuffle; drawNp(); }
 			else if (a === 'open') { openNp(); }
 			else if (a === 'closenp') { closeNp(); }
 			else if (a === 'jump') { qi = parseInt(b.getAttribute('data-i'), 10); load(true); }
+			else if (a === 'share') { var ts = cur(); if (ts) { shareFile(ts.path); } }
 			else if (a === 'study') { var t = cur(); if (t) { closeNp(); Mixer.startSession(lastName(t.album || '') || baseName(t.name), t.album || parentOf(t.path)); } }
 		}
 		elPlayer.addEventListener('click', onClick);
@@ -457,7 +508,7 @@
 			var c = elNp.querySelector('#es-cur'), d = elNp.querySelector('#es-dur'), s = elNp.querySelector('#es-seekr');
 			if (c) { c.textContent = fmt(audio.currentTime); }
 			if (d) { d.textContent = fmt(audio.duration); }
-			if (s && audio.duration && document.activeElement !== s) { s.value = Math.round(f * 1000); }
+			if (s && audio.duration && !scrubP) { s.value = Math.round(f * 1000); paintRange(s); }
 		});
 		audio.addEventListener('play', draw);
 		audio.addEventListener('pause', draw);
@@ -465,6 +516,63 @@
 		audio.addEventListener('error', function () { msg = 'Non riesco a leggere questo file.'; draw(); });
 		audio.addEventListener('loadedmetadata', function () { msg = ''; draw(); });
 		var v = parseFloat(store('vol')); if (v >= 0 && v <= 1) { audio.volume = v; }
+
+		/* barra del mini-player: clic o trascinamento per andare avanti e indietro */
+		var barDrag = false;
+		/* durante lo scorrimento (barra piccola o grande) il brano si ferma e riparte al rilascio, se suonava */
+		function scrubBegin() { if (scrubP) { return; } scrubP = true; scrubWas = !audio.paused; if (scrubWas) { audio.pause(); } }
+		function scrubEnd() { if (!scrubP) { return; } scrubP = false; if (scrubWas) { scrubWas = false; audio.play().catch(function () { }); } draw(); }
+		document.addEventListener('pointerup', scrubEnd);
+		document.addEventListener('pointercancel', scrubEnd);
+		elNp.addEventListener('pointerdown', function (e) { if (e.target.id === 'es-seekr') { scrubBegin(); } });		function barSeek(e) {
+			var bar = elPlayer.querySelector('.es-mini-bar');
+			if (!bar || !audio.duration) { return; }
+			var r = bar.getBoundingClientRect();
+			audio.currentTime = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * audio.duration;
+		}
+		elPlayer.addEventListener('pointerdown', function (e) {
+			var bar = e.target.closest('.es-mini-bar');
+			if (!bar) { return; }
+			barDrag = true; scrubBegin();
+			try { bar.setPointerCapture(e.pointerId); } catch (er) { /* non essenziale */ }
+			barSeek(e);
+		});
+		elPlayer.addEventListener('pointermove', function (e) { if (barDrag) { barSeek(e); } });
+		elPlayer.addEventListener('pointerup', function () { barDrag = false; });
+		elPlayer.addEventListener('pointercancel', function () { barDrag = false; });
+		/* dopo aver mosso una barra, la tastiera torna alle scorciatoie */
+		elNp.addEventListener('change', function (e) { if (e.target.type === 'range') { e.target.blur(); } });
+
+		/* scorciatoie da tastiera (quando il mixer è chiuso) */
+		function mixerOpen() { var m = root.querySelector('#es-mixer'); return !!m && !m.classList.contains('es-hide'); }
+		function seekBy(d) { if (audio.duration) { audio.currentTime = Math.max(0, Math.min(audio.duration, audio.currentTime + d)); } }
+		function setVol(x) { audio.volume = Math.max(0, Math.min(1, x)); store('vol', String(audio.volume)); var vr = elNp.querySelector('#es-volr'); if (vr) { vr.value = Math.round(audio.volume * 100); } }
+		document.addEventListener('keydown', function (e) {
+			if (e.ctrlKey || e.metaKey || e.altKey || !cur() || mixerOpen()) { return; }
+			var tg = e.target;
+			if (tg && tg.matches && tg.matches('textarea, select, input:not([type=range])')) { return; }
+			var k = e.key, used = true;
+			if (tg && tg.tagName === 'BUTTON' && (k === ' ' || k === 'Enter')) { return; }
+			if (k === ' ' || k === 'k' || k === 'K') { if (audio.paused) { Mixer.pause(); audio.play(); } else { audio.pause(); } }
+			else if (k === 'ArrowLeft') { seekBy(e.shiftKey ? -30 : -5); }
+			else if (k === 'ArrowRight') { seekBy(e.shiftKey ? 30 : 5); }
+			else if (k === 'j' || k === 'J') { seekBy(-10); }
+			else if (k === 'l' || k === 'L') { seekBy(10); }
+			else if (k === 'ArrowUp') { setVol(audio.volume + 0.05); }
+			else if (k === 'ArrowDown') { setVol(audio.volume - 0.05); }
+			else if (k === 'm' || k === 'M') { audio.muted = !audio.muted; toast(audio.muted ? 'Audio disattivato' : 'Audio attivo'); }
+			else if (k === 'n' || k === 'N') { next(); }
+			else if (k === 'p' || k === 'P') { prev(); }
+			else if (k === 's' || k === 'S') { shuffle = !shuffle; drawNp(); toast(shuffle ? 'Casuale attivo' : 'Casuale spento'); }
+			else if (k === 'r' || k === 'R') { repeat = !repeat; drawNp(); toast(repeat ? 'Ripeti attivo' : 'Ripeti spento'); }
+			else if (k === 'q' || k === 'Q') { showQ = !showQ; if (npOpen()) { drawNp(); } }
+			else if (/^[0-9]$/.test(k)) { if (audio.duration) { audio.currentTime = audio.duration * parseInt(k, 10) / 10; } }
+			else if (k === 'Escape' && npOpen()) { closeNp(); }
+			else if (k === 'Enter' && !npOpen()) { openNp(); }
+			else if (k === '?') { toast('Player: Spazio play/pausa · ← → ±5 s (Maiusc ±30) · J/L ±10 s · ↑ ↓ volume · M muto · N/P brano dopo/prima · S casuale · R ripeti · Q coda · 0-9 salta · Invio apre schermo intero · Esc chiude'); }
+			else { used = false; }
+			if (used) { e.preventDefault(); }
+		});
 
 		return {
 			playList: function (items, i, cv, shuf) {
@@ -481,7 +589,7 @@
 	var Mixer = (function () {
 		var ctx = null, master = null, masterVol = 1;
 		var tracks = [], nextId = 1, session = null;
-		var playing = false, pos = 0, t0 = 0, raf = 0, loop = false, mono = MOBILE;
+		var playing = false, pos = 0, t0 = 0, raf = 0, loop = false, mono = MOBILE, scrubbing = false;
 		var loadQ = [], loading = 0, built = false, browserMix = null;
 
 		function ensureCtx() {
@@ -563,6 +671,8 @@
 			stopSources(); playing = false; cancelAnimationFrame(raf); drawTransport(); movePlayhead();
 		}
 		function stop() { pause(); pos = 0; movePlayhead(); drawTransport(); }
+		/* durante lo scorrimento il suono si ferma; alla fine riparte dal nuovo punto solo se stava suonando */
+		function scrubStart() { if (scrubbing) { return; } scrubbing = true; if (playing) { stopSources(); } }
 		function seek(sec) {
 			pos = Math.max(0, Math.min(duration(), sec));
 			if (playing) { startSources(pos); }
@@ -570,9 +680,9 @@
 		}
 		function tick() {
 			if (!playing) { return; }
-			pos = ctx.currentTime - t0;
+			if (!scrubbing) { pos = ctx.currentTime - t0; }
 			var d = duration();
-			if (pos >= d) {
+			if (pos >= d && !scrubbing) {
 				if (loop && d > 0) { pos = 0; startSources(0); }
 				else { playing = false; pos = 0; stopSources(); drawTransport(); movePlayhead(); return; }
 			}
@@ -734,6 +844,11 @@
 			elMix.querySelector('#es-file').addEventListener('change', function (e) { addLocal(e.target.files); e.target.value = ''; });
 			elMix.addEventListener('click', onClick);
 			elMix.addEventListener('input', onInput);
+			/* fine del trascinamento della barra: applica la posizione e restituisci la tastiera alle scorciatoie */
+			elMix.addEventListener('change', function (e) {
+				if (e.target.getAttribute && e.target.getAttribute('data-k') === 'scrub') { scrubbing = false; seek(pos); }
+				if (e.target.type === 'range') { e.target.blur(); }
+			});
 			setupLaneInteractions();
 		}
 		function redraw() {
@@ -784,7 +899,9 @@
 		function movePlayhead() {
 			if (!built) { return; }
 			var d = Math.max(duration(), 1);
-			var cur = playing ? Math.min(d, ctx.currentTime - t0) : pos;
+			var cur = scrubbing ? pos : (playing ? Math.min(d, ctx.currentTime - t0) : pos);
+			var sc = elMix.querySelector('#es-scrub');
+			if (sc && !scrubbing) { sc.value = String(Math.round(Math.max(0, Math.min(1, cur / d)) * 1000)); paintRange(sc); }
 			var pct = Math.max(0, Math.min(100, cur / d * 100));
 			[].forEach.call(elMix.querySelectorAll('.es-ph'), function (el) { el.style.left = pct + '%'; });
 			var tm = elMix.querySelector('#es-t');
@@ -798,6 +915,7 @@
 				'<button class="es-btn pri" data-a="play">' + (playing ? '⏸ Pausa' : '▶ Play') + '</button><button class="es-btn" data-a="stop">⏹</button>' +
 				'<button class="es-btn' + (loop ? ' on' : '') + '" data-a="loop" title="Ripeti">⟲</button>' +
 				'<span class="es-time" id="es-t">' + fmt(playing ? ctx.currentTime - t0 : pos) + ' <small>/ ' + fmt(duration()) + '</small></span>' +
+					'<input type="range" class="es-scrub" id="es-scrub" min="0" max="1000" value="' + Math.round(Math.max(0, Math.min(1, (playing ? ctx.currentTime - t0 : pos) / Math.max(duration(), 1))) * 1000) + '" data-k="scrub" title="Trascina per andare avanti e indietro">' +
 				'<label class="es-master">Master <input type="range" min="0" max="120" value="' + Math.round(masterVol * 100) + '" data-k="master"></label>' +
 				'<button class="es-btn small" data-a="clear" title="Togli tutte le tracce">Svuota</button>' +
 				'<label class="es-mem"><input type="checkbox" data-k="mono"' + (mono ? ' checked' : '') + '> Risparmia memoria (mono)</label>' +
@@ -825,6 +943,7 @@
 		function onInput(e) {
 			var k = e.target.getAttribute('data-k');
 			if (!k) { return; }
+			if (k === 'scrub') { scrubStart(); pos = Math.max(0, Math.min(duration(), e.target.value / 1000 * duration())); movePlayhead(); return; }
 			if (k === 'master') { masterVol = e.target.value / 100; if (master) { master.gain.setTargetAtTime(masterVol, ctx.currentTime, 0.015); } return; }
 			if (k === 'mono') { mono = e.target.checked; toast(mono ? 'Le prossime tracce useranno meno memoria (mono).' : 'Le prossime tracce restano in stereo.'); return; }
 			var t = byId(laneId(e));
@@ -844,10 +963,18 @@
 				if (!box) { return; }
 				var lane = box.closest('.es-lane'), t = byId(parseInt(lane.getAttribute('data-id'), 10));
 				drag = { box: box, t: t, x0: e.clientX, off0: t ? t.offset : 0, moved: false, onWave: !!e.target.closest('.es-wave') };
+				drag.scrub = !drag.onWave || e.shiftKey; /* fuori dall'onda, o con Maiusc: il trascinamento sposta il cursore */
 				try { box.setPointerCapture(e.pointerId); } catch (er) { /* non essenziale */ }
 			});
 			elMix.addEventListener('pointermove', function (e) {
-				if (!drag || !drag.t || !drag.onWave || !drag.t.buffer) { return; }
+				if (!drag) { return; }
+				if (drag.scrub) {
+					var rb = drag.box.getBoundingClientRect();
+					if (Math.abs(e.clientX - drag.x0) > 3) { drag.moved = true; }
+					if (drag.moved) { scrubStart(); pos = Math.max(0, Math.min(duration(), (e.clientX - rb.left) / rb.width * duration())); movePlayhead(); }
+					return;
+				}
+				if (!drag.t || !drag.onWave || !drag.t.buffer) { return; }
 				var dx = e.clientX - drag.x0;
 				if (Math.abs(dx) > 5) { drag.moved = true; }
 				if (!drag.moved) { return; }
@@ -859,6 +986,7 @@
 			elMix.addEventListener('pointerup', function (e) {
 				if (!drag) { return; }
 				var d = drag; drag = null;
+				if (d.scrub && d.moved) { scrubbing = false; seek(pos); return; }
 				if (d.moved) { if (playing) { startSources(pos = ctx.currentTime - t0); } redraw(); return; }
 				var r = d.box.getBoundingClientRect();
 				seek((e.clientX - r.left) / r.width * Math.max(duration(), 0));
@@ -886,9 +1014,25 @@
 			});
 		}
 		document.addEventListener('keydown', function (e) {
-			if (elMix.classList.contains('es-hide') || e.target.matches('input, textarea, select')) { return; }
-			if (e.code === 'Space') { e.preventDefault(); if (playing) { pause(); } else { play(); } }
-			if (e.code === 'Escape') { close(); }
+			if (elMix.classList.contains('es-hide') || e.ctrlKey || e.metaKey || e.altKey) { return; }
+			var tg = e.target;
+			if (tg && tg.matches && tg.matches('textarea, select, input:not([type=range])')) { return; }
+			var k = e.key, used = true;
+			if (tg && tg.tagName === 'BUTTON' && (k === ' ' || k === 'Enter')) { return; }
+			var nowT = playing ? ctx.currentTime - t0 : pos;
+			var dig = /^Digit([1-9])$/.exec(e.code);
+			if (k === ' ' || k === 'k' || k === 'K') { if (playing) { pause(); } else { play(); } }
+			else if (k === 'ArrowLeft') { seek(nowT - (e.shiftKey ? 15 : 5)); }
+			else if (k === 'ArrowRight') { seek(nowT + (e.shiftKey ? 15 : 5)); }
+			else if (k === 'j' || k === 'J') { seek(nowT - 10); }
+			else if (k === 'l' || k === 'L') { loop = !loop; drawTransport(); }
+			else if (k === 'Home' || k === '0') { seek(0); }
+			else if (k === 'End') { seek(duration()); }
+			else if (dig) { var ln = elMix.querySelectorAll('.es-lane')[parseInt(dig[1], 10) - 1]; var bt = ln && ln.querySelector(e.shiftKey ? '.solo' : '.mute'); if (bt) { bt.click(); } }
+			else if (k === 'Escape') { close(); }
+			else if (k === '?') { toast('Mixer: Spazio play/pausa · ← → ±5 s (Maiusc ±15) · J −10 s · Home inizio · L ripeti · 1-9 muta traccia (Maiusc = solo) · trascina fuori dall\'onda o con Maiusc per scorrere · Esc chiudi'); }
+			else { used = false; }
+			if (used) { e.preventDefault(); }
 		});
 		window.addEventListener('resize', function () { if (!elMix.classList.contains('es-hide')) { redraw(); } });
 		elSess.addEventListener('click', open);

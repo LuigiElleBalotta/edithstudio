@@ -84,3 +84,49 @@ body.es-noscroll { overflow: hidden; }
 #edithstudio .es-qlist .es-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #edithstudio .es-seek { display: flex; align-items: center; gap: 8px; }
 #edithstudio .es-seek span { font-size: 12px; color: var(--e-mute); font-variant-numeric: tabular-nums; flex: none; }
+
+/* «In riproduzione» come Spotify: solo il brano; la coda si apre con il pulsante ☰ */
+#edithstudio .es-np-body.one { grid-template-columns: minmax(0, 440px); justify-content: center; }
+/* barra del mini-player: zona di tocco più grande, si può trascinare */
+#edithstudio .es-mini-bar { position: relative; cursor: pointer; touch-action: none; }
+#edithstudio .es-mini-bar::before { content: ""; position: absolute; left: 0; right: 0; top: -10px; bottom: -8px; }
+/* mixer: barra per scorrere avanti e indietro */
+#edithstudio .es-scrub { flex: 1 1 100%; min-width: 0; accent-color: var(--e-amber); height: 22px; margin: 2px 0; }
+
+/* ---- barre (volume, avanzamento, mixer) ---------------------------------
+   Barra sottile con la parte già fatta colorata (azzurro -> arancio) e un pallino con alone.
+   La parte colorata segue la variabile --p, aggiornata dal JavaScript. */
+#edithstudio input[type=range] {
+	-webkit-appearance: none; appearance: none; background: transparent; margin: 0; padding: 0; height: 24px; cursor: pointer; --p: 0%;
+	touch-action: pan-y; min-width: 0;
+}
+#edithstudio input[type=range]:focus { outline: none; }
+#edithstudio input[type=range]::-webkit-slider-runnable-track {
+	height: 5px; border-radius: 999px;
+	background: linear-gradient(90deg, #5fd8f2, #ff9a2e) 0 0 / var(--p) 100% no-repeat, rgba(127, 157, 189, 0.28);
+	transition: height 0.12s;
+}
+#edithstudio input[type=range]::-webkit-slider-thumb {
+	-webkit-appearance: none; appearance: none; width: 14px; height: 14px; margin-top: -4.5px; border-radius: 50%; border: 0;
+	background: #fff; box-shadow: 0 0 0 3px rgba(255, 154, 46, 0.38), 0 2px 8px rgba(0, 0, 0, 0.55); transition: transform 0.12s, box-shadow 0.12s;
+}
+#edithstudio input[type=range]:hover::-webkit-slider-runnable-track, #edithstudio input[type=range]:active::-webkit-slider-runnable-track { height: 7px; }
+#edithstudio input[type=range]:hover::-webkit-slider-thumb, #edithstudio input[type=range]:active::-webkit-slider-thumb { transform: scale(1.25); box-shadow: 0 0 0 5px rgba(255, 154, 46, 0.4), 0 2px 10px rgba(0, 0, 0, 0.6); }
+#edithstudio input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px rgba(95, 216, 242, 0.7); }
+#edithstudio input[type=range]::-moz-range-track { height: 5px; border-radius: 999px; background: rgba(127, 157, 189, 0.28); border: 0; }
+#edithstudio input[type=range]::-moz-range-progress { height: 5px; border-radius: 999px; background: linear-gradient(90deg, #5fd8f2, #ff9a2e); }
+#edithstudio input[type=range]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; border: 0; background: #fff; box-shadow: 0 0 0 3px rgba(255, 154, 46, 0.38), 0 2px 8px rgba(0, 0, 0, 0.55); }
+/* il bilanciamento (Pan) parte dal centro: niente colore di riempimento */
+#edithstudio input[data-k=pan]::-webkit-slider-runnable-track { background: rgba(127, 157, 189, 0.28); }
+#edithstudio input[data-k=pan]::-moz-range-progress { background: transparent; }
+
+/* barra grande di «In riproduzione» */
+#edithstudio .es-seek { gap: 12px; }
+#edithstudio .es-seek span { width: 42px; }
+#edithstudio .es-seek span:first-child { text-align: right; }
+#edithstudio .es-seek span:last-child { text-align: left; }
+#edithstudio .es-seek input { flex: 1; height: 30px; }
+#edithstudio .es-seek input::-webkit-slider-runnable-track { height: 6px; }
+#edithstudio .es-seek input:hover::-webkit-slider-runnable-track, #edithstudio .es-seek input:active::-webkit-slider-runnable-track { height: 8px; }
+#edithstudio .es-seek input::-webkit-slider-thumb { width: 16px; height: 16px; margin-top: -5px; }
+#edithstudio .es-npvol input { max-width: 200px; }
