@@ -5,7 +5,7 @@
 	<name>EDITH Studio</name>
 	<summary>Lettore e mixer multitraccia per studiare i brani della band</summary>
 	<description><![CDATA[Un lettore musicale che segue le cartelle di Nextcloud (una cartella per brano, con il mix completo e sottocartelle di tracce) e un mixer multitraccia in stile DAW: importi le tracce, le sposti, alzi il volume, le silenzi, le isoli e le panni, per studiare il brano. Nessuna libreria da scansionare: legge direttamente i file che carichi.]]></description>
-	<version>0.1.0</version>
+	<version>0.3.0</version>
 	<licence>agpl</licence>
 	<author>EDITH Studio</author>
 	<namespace>EdithStudio</namespace>
