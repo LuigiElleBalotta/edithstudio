@@ -1,6 +1,8 @@
-/* EDITH Studio: lettore + mixer multitraccia.
+/* EDITH Studio: player stile "libreria musicale" + sessione di studio (mixer multitraccia).
  * Nessuna libreria, nessuna build. Parla con il WebDAV di Nextcloud con la sessione dell'utente
- * (header OCS-APIRequest): vede solo ciò che l'utente può già vedere. */
+ * (header OCS-APIRequest): vede solo ciò che l'utente può già vedere.
+ *  - Player: album (cartelle) con copertina, mini-player, schermata «In riproduzione» con coda.
+ *  - Sessione di studio: il mixer si apre SOLO da un brano; non è sempre in vista. */
 (function () {
 	'use strict';
 	var root = document.getElementById('edithstudio');
@@ -9,8 +11,10 @@
 	var UID = root.getAttribute('data-uid') || '';
 	var WEB = root.getAttribute('data-webroot') || '';
 	var AUDIO_EXT = ['mp3', 'wav', 'flac', 'ogg', 'oga', 'opus', 'm4a', 'aac', 'aif', 'aiff', 'wma'];
+	var COVER_RE = /^(cover|folder|front|artwork|copertina)\.(jpe?g|png|webp)$/i;
 	var MOBILE = /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
 	var STORE = 'edithstudio_';
+	var ART = [['#0b3a5c', '#5fd8f2'], ['#4d1e02', '#ff9a2e'], ['#1d2b64', '#8b6cf0'], ['#06402b', '#3ee6a0'], ['#5c0b3a', '#ff6fa8'], ['#1a2a3a', '#9db4cc']];
 
 	/* ------------------------------------------------------------ utilità */
 	function esc(s) {
@@ -32,7 +36,9 @@
 	}
 	function store(k, v) { try { if (v === undefined) { return localStorage.getItem(STORE + k); } localStorage.setItem(STORE + k, v); } catch (e) { return null; } }
 	function parentOf(p) { var i = p.lastIndexOf('/'); return i <= 0 ? '/' : p.slice(0, i); }
-	function join(dir, name) { return (dir === '/' ? '' : dir) + '/' + name; }
+	function lastName(p) { return p.split('/').filter(Boolean).pop() || ''; }
+	function hash(s) { var h = 0; for (var i = 0; i < s.length; i++) { h = (h * 31 + s.charCodeAt(i)) | 0; } return Math.abs(h); }
+	function toTrack(f, album) { return { path: f.path, name: f.name, folder: lastName(parentOf(f.path)), album: album || parentOf(f.path), cover: f.cover || '' }; }
 
 	var toastTimer = 0;
 	function toast(m) {
@@ -41,6 +47,14 @@
 		el.textContent = m; el.classList.add('on');
 		clearTimeout(toastTimer);
 		toastTimer = setTimeout(function () { el.classList.remove('on'); }, 4500);
+	}
+
+	/* copertina: immagine della cartella (cover.jpg…) oppure un disegno generato dal nome */
+	function art(name, cover, cls) {
+		if (cover) { return '<div class="es-art ' + (cls || '') + '"><img alt="" loading="lazy" src="' + esc(fileUrl(cover)) + '"></div>'; }
+		var c = ART[hash(name) % ART.length];
+		var ini = String(name).replace(/[^A-Za-zÀ-ÿ0-9 ]/g, ' ').trim().split(/\s+/).slice(0, 2).map(function (w) { return w.charAt(0).toUpperCase(); }).join('');
+		return '<div class="es-art ' + (cls || '') + '" style="background:linear-gradient(135deg,' + c[0] + ',' + c[1] + ')"><span>' + esc(ini || '♪') + '</span></div>';
 	}
 
 	/* ------------------------------------------------------------ WebDAV */
@@ -63,7 +77,7 @@
 		}).then(function (txt) {
 			var xml = new DOMParser().parseFromString(txt, 'application/xml');
 			var prefix = decodeURIComponent(davRoot);
-			var out = [];
+			var out = [], cover = '';
 			var resp = xml.getElementsByTagNameNS('DAV:', 'response');
 			for (var i = 0; i < resp.length; i++) {
 				var h = resp[i].getElementsByTagNameNS('DAV:', 'href')[0];
@@ -80,16 +94,17 @@
 				if (href === path || (href === '/' && path === '/')) { continue; }
 				var name = href.split('/').pop();
 				if (!name || name.charAt(0) === '.') { continue; }
+				var isDir = resp[i].getElementsByTagNameNS('DAV:', 'collection').length > 0;
+				if (!isDir && COVER_RE.test(name)) { if (!cover) { cover = href; } continue; }
 				var sz = resp[i].getElementsByTagNameNS('DAV:', 'getcontentlength')[0];
-				out.push({
-					name: name, path: href, dir: resp[i].getElementsByTagNameNS('DAV:', 'collection').length > 0,
-					size: sz ? parseInt(sz.textContent, 10) || 0 : 0
-				});
+				out.push({ name: name, path: href, dir: isDir, size: sz ? parseInt(sz.textContent, 10) || 0 : 0 });
 			}
 			var cmp = function (a, b) { return a.name.localeCompare(b.name, 'it', { numeric: true, sensitivity: 'base' }); };
 			var dirs = out.filter(function (e) { return e.dir; }).sort(cmp);
 			var files = out.filter(function (e) { return !e.dir && isAudio(e.name); }).sort(cmp);
-			return dirs.concat(files);
+			var res = dirs.concat(files);
+			res.cover = cover;
+			return res;
 		});
 	}
 
@@ -112,31 +127,157 @@
 
 	root.innerHTML =
 		'<div class="es-top"><div class="es-brand">' + LOGO + '<div><b>E.D.I.T.H.</b><small>Studio</small></div></div>' +
-		'<div class="es-tabs"><button class="es-tab on" data-view="lib">Libreria</button><button class="es-tab" data-view="mix">Mixer</button></div></div>' +
-		'<section id="es-lib" class="es-card"><h3 class="es-h">Libreria</h3><div id="es-browser-lib"></div></section>' +
-		'<section id="es-mix" class="es-hide"></section>' +
-		'<footer class="es-player es-hide" id="es-player"></footer>';
+		'<input id="es-q" class="es-search" type="search" placeholder="Cerca in questa cartella" autocomplete="off">' +
+		'<button class="es-btn es-hide" id="es-sess" title="Torna alla sessione di studio">🎚 Sessione di studio</button></div>' +
+		'<div id="es-lib"></div>' +
+		'<div id="es-mixer" class="es-sheet es-hide"></div>' +
+		'<div id="es-np" class="es-sheet es-np es-hide"></div>' +
+		'<footer class="es-mini es-hide" id="es-player"></footer>';
 
 	var elLib = root.querySelector('#es-lib');
-	var elMix = root.querySelector('#es-mix');
+	var elMix = root.querySelector('#es-mixer');
+	var elNp = root.querySelector('#es-np');
 	var elPlayer = root.querySelector('#es-player');
+	var elSess = root.querySelector('#es-sess');
 
-	function showView(v) {
-		elLib.classList.toggle('es-hide', v !== 'lib');
-		elMix.classList.toggle('es-hide', v !== 'mix');
-		[].forEach.call(root.querySelectorAll('.es-tab'), function (b) { b.classList.toggle('on', b.getAttribute('data-view') === v); });
-		store('view', v);
-		if (v === 'mix') { Mixer.redraw(); }
-	}
-	root.querySelector('.es-tabs').addEventListener('click', function (e) {
-		var b = e.target.closest('.es-tab');
-		if (b) { showView(b.getAttribute('data-view')); }
-	});
+	/* ------------------------------------------------------------ libreria (album a griglia, pagina dell'album) */
+	var Lib = (function () {
+		var path = store('libpath') || '/';
+		var entries = [], groups = [], cover = '', err = '', loading = false, q = '';
 
-	/* ------------------------------------------------------------ navigatore di cartelle (usato dalla libreria e dal mixer) */
-	function Browser(el, mode, key) {
+		function go(p, after) {
+			path = p; loading = true; err = ''; q = '';
+			var qi = root.querySelector('#es-q'); if (qi) { qi.value = ''; }
+			draw();
+			listDir(p).then(function (e) {
+				entries = e; cover = e.cover;
+				var hasAudio = e.some(function (x) { return !x.dir; });
+				if (!hasAudio) { return []; }
+				return Promise.all(e.filter(function (x) { return x.dir; }).slice(0, 24).map(function (d) {
+					return listDir(d.path).then(function (x) {
+						return { dir: d, files: x.filter(function (f) { return !f.dir; }), cover: x.cover };
+					}).catch(function () { return { dir: d, files: [], cover: '' }; });
+				}));
+			}).then(function (g) {
+				groups = g; loading = false; store('libpath', p); draw(); decorate();
+				if (after) { after(); }
+			}).catch(function (er) {
+				loading = false; entries = []; groups = []; err = er.message || 'Errore.';
+				if (p !== '/') { store('libpath', '/'); }
+				draw();
+			});
+		}
+
+		/* copertine e numero di brani delle cartelle-album, caricati dopo (senza far aspettare la pagina) */
+		function decorate() {
+			var cards = [].slice.call(elLib.querySelectorAll('.es-card-album[data-dir]'));
+			var i = 0;
+			function next() {
+				if (i >= cards.length || i > 40) { return; }
+				var c = cards[i++], p = c.getAttribute('data-dir');
+				listDir(p).then(function (x) {
+					var n = x.filter(function (f) { return !f.dir; }).length, d = x.filter(function (f) { return f.dir; }).length;
+					var sub = c.querySelector('.es-sub');
+					if (sub) { sub.textContent = (n ? n + (n === 1 ? ' brano' : ' brani') : '') + (n && d ? ' · ' : '') + (d ? d + (d === 1 ? ' cartella' : ' cartelle') : '') || 'vuota'; }
+					if (x.cover) { var a = c.querySelector('.es-art'); if (a) { a.outerHTML = art(lastName(p), x.cover); } }
+				}).catch(function () { /* resta il disegno */ }).then(next);
+			}
+			next(); next();
+		}
+
+		function crumbs() {
+			var parts = path.split('/').filter(Boolean), acc = '';
+			var h = '<div class="es-crumbs"><button data-go="/">Tutti i file</button>';
+			parts.forEach(function (p) { acc += '/' + p; h += '<span>›</span><button data-go="' + esc(acc) + '">' + esc(p) + '</button>'; });
+			return h + '</div>';
+		}
+		function matches(name) { return !q || name.toLowerCase().indexOf(q) >= 0; }
+		function row(f, i, group) {
+			var now = Player.currentPath() === f.path;
+			return '<li class="es-trk' + (now ? ' now' : '') + '" data-a="play" data-g="' + group + '" data-i="' + i + '"><span class="es-n">' + (now ? '♪' : (i + 1)) + '</span>' +
+				'<span class="es-name">' + esc(baseName(f.name)) + '</span><span class="es-size">' + esc(fmtSize(f.size)) + '</span></li>';
+		}
+
+		function draw() {
+			var h = crumbs();
+			var dirs = entries.filter(function (e) { return e.dir && matches(e.name); });
+			var files = entries.filter(function (e) { return !e.dir && matches(e.name); });
+			var isAlbum = entries.some(function (e) { return !e.dir; });
+			if (loading) { h += '<div class="es-msg">Carico…</div>'; }
+			else if (err) { h += '<div class="es-err">' + esc(err) + '</div>'; }
+			else if (!entries.length) { h += '<div class="es-empty">Qui non ci sono cartelle né file audio.</div>'; }
+			if (!loading && !err) {
+				if (isAlbum) {
+					var title = lastName(path) || 'Tutti i file';
+					var nStem = groups.reduce(function (s, g) { return s + g.files.length; }, 0);
+					h += '<section class="es-album"><div class="es-album-art">' + art(title, cover, 'big') + '</div><div class="es-album-info"><small>Brano</small><h2>' + esc(title) + '</h2>' +
+						'<p>' + files.length + (files.length === 1 ? ' file' : ' file') + (nStem ? ' · ' + nStem + ' tracce separate' : '') + '</p>' +
+						'<div class="es-album-btn"><button class="es-btn pri" data-a="playall">▶ Riproduci</button><button class="es-btn" data-a="shuffleall">⤮ Casuale</button>' +
+						'<button class="es-btn" data-a="study" title="Apre il mixer con tutte le tracce di questo brano">🎚 Sessione di studio</button></div></div></section>';
+					h += '<ul class="es-tracks">' + files.map(function (f, i) { return row(f, i, 'main'); }).join('') + '</ul>';
+					groups.forEach(function (g, gi) {
+						var gf = g.files.filter(function (f) { return matches(f.name) || matches(g.dir.name); });
+						if (!gf.length) { return; }
+						h += '<h3 class="es-gh">' + esc(g.dir.name) + ' <small>' + g.files.length + (g.files.length === 1 ? ' traccia' : ' tracce') + '</small></h3>' +
+							'<ul class="es-tracks">' + gf.map(function (f, i) { return row(f, i, 'g' + gi); }).join('') + '</ul>';
+					});
+				}
+				var others = isAlbum ? [] : dirs;
+				if (others.length) {
+					h += '<div class="es-grid">' + others.map(function (d) {
+						return '<button class="es-card-album" data-go="' + esc(d.path) + '" data-dir="' + esc(d.path) + '">' + art(d.name, '') + '<b>' + esc(d.name) + '</b><span class="es-sub">…</span></button>';
+					}).join('') + '</div>';
+				}
+				if (!isAlbum && files.length) {
+					h += '<ul class="es-tracks">' + files.map(function (f, i) { return row(f, i, 'main'); }).join('') + '</ul>';
+				}
+			}
+			elLib.innerHTML = h;
+		}
+
+		function listFor(group) {
+			if (group === 'main') { return entries.filter(function (e) { return !e.dir; }); }
+			var g = groups[parseInt(group.slice(1), 10)];
+			return g ? g.files : [];
+		}
+
+		elLib.addEventListener('click', function (e) {
+			var g = e.target.closest('[data-go]');
+			if (g) { go(g.getAttribute('data-go')); window.scrollTo(0, 0); return; }
+			var a = e.target.closest('[data-a]');
+			if (!a) { return; }
+			var act = a.getAttribute('data-a');
+			var album = path;
+			if (act === 'play') {
+				var list = listFor(a.getAttribute('data-g')), i = parseInt(a.getAttribute('data-i'), 10);
+				var vis = list.filter(function (f) { return matches(f.name); });
+				var f = vis[i];
+				if (f) { Player.playList(vis.map(function (x) { return toTrack(x, album); }), i, cover); }
+			} else if (act === 'playall' || act === 'shuffleall') {
+				var main = entries.filter(function (x) { return !x.dir; });
+				if (main.length) { Player.playList(main.map(function (x) { return toTrack(x, album); }), 0, cover, act === 'shuffleall'); }
+			} else if (act === 'study') {
+				Mixer.startSession(lastName(path) || 'Sessione', path);
+			}
+		});
+		root.querySelector('#es-q').addEventListener('input', function (e) { q = e.target.value.trim().toLowerCase(); draw(); });
+
+		/* link diretto: ?play=/cartella/brano.mp3 apre la cartella e fa partire quel file */
+		function openFile(p) {
+			go(parentOf(p), function () {
+				var main = entries.filter(function (x) { return !x.dir; });
+				var i = main.findIndex(function (x) { return x.path === p; });
+				if (i >= 0) { Player.playList(main.map(function (x) { return toTrack(x, path); }), i, cover); }
+				else { toast('Non trovo questo file (forse è stato spostato o non hai accesso).'); }
+			});
+		}
+		return { go: go, draw: draw, openFile: openFile, start: function () { go(path); } };
+	})();
+
+	/* ------------------------------------------------------------ navigatore di cartelle (solo per aggiungere tracce al mixer) */
+	function Browser(el, key) {
 		var self = this;
-		this.el = el; this.mode = mode; this.key = key;
+		this.el = el; this.key = key;
 		this.path = store(key) || '/';
 		this.entries = [];
 		this.err = '';
@@ -166,59 +307,38 @@
 		var parts = this.path.split('/').filter(Boolean);
 		var crumbs = '<button data-go="/">Tutti i file</button>';
 		var acc = '';
-		parts.forEach(function (p) { acc += '/' + p; crumbs += '<span>/</span><button data-go="' + esc(acc) + '">' + esc(p) + '</button>'; });
+		parts.forEach(function (p) { acc += '/' + p; crumbs += '<span>›</span><button data-go="' + esc(acc) + '">' + esc(p) + '</button>'; });
 		var h = '<div class="es-crumbs">' + crumbs + '</div>';
 		var files = this.entries.filter(function (e) { return !e.dir; });
 		var dirs = this.entries.filter(function (e) { return e.dir; });
-		if (this.mode === 'play') {
-			h += '<div class="es-actions">' +
-				(files.length ? '<button class="es-btn pri" data-a="playall">▶ Riproduci questa cartella</button>' : '') +
-				'<button class="es-btn" data-a="allsong" title="Mette nel mixer le tracce di questa cartella e delle sottocartelle">＋ Tutta la canzone nel mixer</button></div>';
-		} else {
-			h += '<div class="es-actions"><button class="es-btn" data-a="addhere">＋ Aggiungi questa cartella</button>' +
-				'<button class="es-btn" data-a="allsong">＋ Con le sottocartelle</button></div>';
-		}
+		h += '<div class="es-actions"><button class="es-btn" data-a="addhere">＋ Aggiungi questa cartella</button>' +
+			'<button class="es-btn" data-a="allsong">＋ Con le sottocartelle</button></div>';
 		if (this.loading) { h += '<div class="es-msg">Carico…</div>'; }
 		else if (this.err) { h += '<div class="es-err">' + esc(this.err) + '</div>'; }
 		else if (!this.entries.length) { h += '<div class="es-empty">Qui non ci sono cartelle né file audio.</div>'; }
 		h += '<ul class="es-list">';
 		if (this.path !== '/') { h += '<li class="es-row"><span class="es-ico">↰</span><span class="es-name" data-go="' + esc(parentOf(this.path)) + '">Cartella sopra</span></li>'; }
-		var now = Player.currentPath();
 		dirs.forEach(function (d) {
 			h += '<li class="es-row" draggable="true" data-drag="' + esc(JSON.stringify({ dir: d.path })) + '"><span class="es-ico">▸</span>' +
 				'<span class="es-name" data-go="' + esc(d.path) + '">' + esc(d.name) + '</span>' +
-				(this.mode === 'play' ? '<button class="es-btn small" title="Riproduci i file di questa cartella" data-a="playdir" data-p="' + esc(d.path) + '">▶</button>' : '') +
-				'<button class="es-btn small" title="Aggiungi al mixer i file di questa cartella" data-a="adddir" data-p="' + esc(d.path) + '">＋</button></li>';
-		}, this);
+				'<button class="es-btn small" title="Aggiungi i file di questa cartella" data-a="adddir" data-p="' + esc(d.path) + '">＋</button></li>';
+		});
 		files.forEach(function (f) {
-			h += '<li class="es-row' + (now === f.path ? ' now' : '') + '" draggable="true" data-drag="' + esc(JSON.stringify({ path: f.path, name: f.name })) + '">' +
-				'<span class="es-ico">♪</span><span class="es-name" data-a="' + (this.mode === 'play' ? 'play' : 'add') + '" data-p="' + esc(f.path) + '">' + esc(baseName(f.name)) + '</span>' +
-				'<span class="es-size">' + esc(fmtSize(f.size)) + '</span>' +
-				(this.mode === 'play' ? '<button class="es-btn small" title="Riproduci" data-a="play" data-p="' + esc(f.path) + '">▶</button>' : '') +
+			h += '<li class="es-row" draggable="true" data-drag="' + esc(JSON.stringify({ path: f.path, name: f.name })) + '"><span class="es-ico">♪</span>' +
+				'<span class="es-name" data-a="add" data-p="' + esc(f.path) + '">' + esc(baseName(f.name)) + '</span><span class="es-size">' + esc(fmtSize(f.size)) + '</span>' +
 				'<button class="es-btn small" title="Aggiungi al mixer" data-a="add" data-p="' + esc(f.path) + '">＋</button></li>';
-		}, this);
-		h += '</ul>';
-		this.el.innerHTML = h;
+		});
+		this.el.innerHTML = h + '</ul>';
 	};
 	Browser.prototype.click = function (e) {
 		var g = e.target.closest('[data-go]');
 		if (g) { this.go(g.getAttribute('data-go')); return; }
 		var a = e.target.closest('[data-a]');
 		if (!a) { return; }
-		var act = a.getAttribute('data-a');
-		var p = a.getAttribute('data-p');
-		var self = this;
+		var act = a.getAttribute('data-a'), p = a.getAttribute('data-p'), self = this;
 		var files = this.entries.filter(function (x) { return !x.dir; });
-		var tr = function (f) { return { path: f.path, name: f.name, folder: parentOf(f.path).split('/').pop() || '' }; };
-		if (act === 'play' && this.mode !== 'play') { return; }
-		if (act === 'play') {
-			var i = files.findIndex(function (f) { return f.path === p; });
-			Player.playList(files.map(tr), Math.max(0, i));
-		} else if (act === 'playall') {
-			Player.playList(files.map(tr), 0);
-		} else if (act === 'playdir') {
-			audioIn(p, 0).then(function (l) { if (l.length) { Player.playList(l.map(tr), 0); } else { Player.toast('Nessun file audio in questa cartella.'); } });
-		} else if (act === 'add') {
+		var tr = function (f) { return toTrack(f); };
+		if (act === 'add') {
 			var f = files.filter(function (x) { return x.path === p; })[0];
 			if (f) { Mixer.addPaths([tr(f)]); }
 		} else if (act === 'adddir') {
@@ -229,13 +349,12 @@
 			audioIn(self.path, 2).then(function (l) { Mixer.addPaths(l.map(tr)); });
 		}
 	};
-	Browser.prototype.refresh = function () { this.draw(); };
 
-	/* ------------------------------------------------------------ lettore (ascolto normale) */
+	/* ------------------------------------------------------------ player: mini-player + schermata «In riproduzione» */
 	var Player = (function () {
 		var audio = new Audio();
 		audio.preload = 'metadata';
-		var queue = [], qi = -1, repeat = false, msg = '';
+		var queue = [], qi = -1, repeat = false, shuffle = false, msg = '', cover = '';
 
 		function cur() { return queue[qi] || null; }
 		function load(play) {
@@ -246,13 +365,15 @@
 			if (play) { audio.play().catch(function () { msg = 'Il browser non riesce a riprodurre questo file.'; draw(); }); }
 			media();
 			draw();
-			if (browserLib) { browserLib.refresh(); }
+			Lib.draw();
 		}
 		function media() {
 			var t = cur();
 			if (!('mediaSession' in navigator) || !t) { return; }
 			try {
-				navigator.mediaSession.metadata = new MediaMetadata({ title: baseName(t.name), artist: t.folder || '', album: 'EDITH Studio' });
+				var md = { title: baseName(t.name), artist: t.folder || '', album: lastName(t.album || '') || 'EDITH Studio' };
+				if (cover) { md.artwork = [{ src: location.origin + fileUrl(cover) }]; }
+				navigator.mediaSession.metadata = new MediaMetadata(md);
 				navigator.mediaSession.setActionHandler('play', function () { audio.play(); });
 				navigator.mediaSession.setActionHandler('pause', function () { audio.pause(); });
 				navigator.mediaSession.setActionHandler('previoustrack', prev);
@@ -261,44 +382,82 @@
 			} catch (e) { /* alcuni browser non supportano tutte le azioni */ }
 		}
 		function next() {
+			if (!queue.length) { return; }
+			if (shuffle && queue.length > 1) {
+				var j; do { j = Math.floor(Math.random() * queue.length); } while (j === qi);
+				qi = j; load(true); return;
+			}
 			if (qi < queue.length - 1) { qi++; load(true); }
-			else if (repeat && queue.length) { qi = 0; load(true); }
+			else if (repeat) { qi = 0; load(true); }
 		}
 		function prev() {
 			if (audio.currentTime > 3 || qi <= 0) { audio.currentTime = 0; return; }
 			qi--; load(true);
 		}
+		function npOpen() { return !elNp.classList.contains('es-hide'); }
+
 		function draw() {
 			var t = cur();
-			if (!t) { elPlayer.classList.add('es-hide'); return; }
+			if (!t) { elPlayer.classList.add('es-hide'); closeNp(); return; }
 			elPlayer.classList.remove('es-hide');
+			var title = baseName(t.name), sub = msg || t.folder || '';
 			elPlayer.innerHTML =
-				'<div class="es-player-in"><div class="es-now"><b>' + esc(baseName(t.name)) + '</b><small>' + esc(msg || t.folder || '') + '</small></div>' +
+				'<div class="es-mini-bar"><i id="es-mbar"></i></div><div class="es-mini-in">' +
+				'<button class="es-mini-info" data-p="open">' + art(lastName(t.album || '') || title, cover, 'tiny') + '<span class="es-now"><b>' + esc(title) + '</b><small>' + esc(sub) + '</small></span></button>' +
 				'<div class="es-ctl"><button class="es-btn" data-p="prev" title="Precedente">⏮</button>' +
 				'<button class="es-btn pri" data-p="toggle" title="Play / pausa">' + (audio.paused ? '▶' : '⏸') + '</button>' +
-				'<button class="es-btn" data-p="next" title="Successivo">⏭</button>' +
-				'<button class="es-btn' + (repeat ? ' on' : '') + '" data-p="repeat" title="Ripeti la lista">⟲</button></div>' +
-				'<div class="es-seek"><span id="es-cur">' + fmt(audio.currentTime) + '</span><input type="range" id="es-seekr" min="0" max="1000" value="0"><span id="es-dur">' + fmt(audio.duration) + '</span></div>' +
-				'<div class="es-vol"><input type="range" id="es-volr" min="0" max="100" value="' + Math.round(audio.volume * 100) + '" title="Volume"></div></div>';
+				'<button class="es-btn" data-p="next" title="Successivo">⏭</button></div></div>';
+			if (npOpen()) { drawNp(); }
 		}
-		elPlayer.addEventListener('click', function (e) {
+		function drawNp() {
+			var t = cur();
+			if (!t) { return; }
+			var title = baseName(t.name);
+			var up = queue.slice(qi + 1, qi + 40);
+			elNp.innerHTML =
+				'<div class="es-sheet-h"><button class="es-btn" data-p="closenp" title="Chiudi">⌄</button><b>In riproduzione</b><span></span></div>' +
+				'<div class="es-np-body"><div class="es-np-main">' + art(lastName(t.album || '') || title, cover, 'huge') +
+				'<div class="es-np-t"><h2>' + esc(title) + '</h2><p>' + esc(msg || t.folder || '') + '</p></div>' +
+				'<div class="es-seek"><span id="es-cur">' + fmt(audio.currentTime) + '</span><input type="range" id="es-seekr" min="0" max="1000" value="0"><span id="es-dur">' + fmt(audio.duration) + '</span></div>' +
+				'<div class="es-npctl"><button class="es-btn' + (shuffle ? ' on' : '') + '" data-p="shuffle" title="Casuale">⤮</button><button class="es-btn" data-p="prev">⏮</button>' +
+				'<button class="es-btn pri big" data-p="toggle">' + (audio.paused ? '▶' : '⏸') + '</button><button class="es-btn" data-p="next">⏭</button>' +
+				'<button class="es-btn' + (repeat ? ' on' : '') + '" data-p="repeat" title="Ripeti">⟲</button></div>' +
+				'<div class="es-npvol"><span>🔈</span><input type="range" id="es-volr" min="0" max="100" value="' + Math.round(audio.volume * 100) + '" title="Volume"></div>' +
+				'<button class="es-btn" data-p="study">🎚 Studia questo brano</button></div>' +
+				'<div class="es-np-q"><h3 class="es-h">Prossimi brani</h3>' + (up.length ? '<ol class="es-qlist">' + up.map(function (x, k) {
+					return '<li data-p="jump" data-i="' + (qi + 1 + k) + '"><span class="es-n">' + (k + 1) + '</span><span class="es-name">' + esc(baseName(x.name)) + '</span></li>';
+				}).join('') + '</ol>' : '<div class="es-empty">Questo è l\'ultimo brano della lista.</div>') + '</div></div>';
+		}
+		function openNp() { if (!cur()) { return; } elNp.classList.remove('es-hide'); document.body.classList.add('es-noscroll'); drawNp(); }
+		function closeNp() { elNp.classList.add('es-hide'); document.body.classList.remove('es-noscroll'); }
+
+		function onClick(e) {
 			var b = e.target.closest('[data-p]');
 			if (!b) { return; }
 			var a = b.getAttribute('data-p');
 			if (a === 'toggle') { if (audio.paused) { Mixer.pause(); audio.play(); } else { audio.pause(); } }
 			else if (a === 'next') { next(); }
 			else if (a === 'prev') { prev(); }
-			else if (a === 'repeat') { repeat = !repeat; draw(); }
-		});
-		elPlayer.addEventListener('input', function (e) {
+			else if (a === 'repeat') { repeat = !repeat; drawNp(); }
+			else if (a === 'shuffle') { shuffle = !shuffle; drawNp(); }
+			else if (a === 'open') { openNp(); }
+			else if (a === 'closenp') { closeNp(); }
+			else if (a === 'jump') { qi = parseInt(b.getAttribute('data-i'), 10); load(true); }
+			else if (a === 'study') { var t = cur(); if (t) { closeNp(); Mixer.startSession(lastName(t.album || '') || baseName(t.name), t.album || parentOf(t.path)); } }
+		}
+		elPlayer.addEventListener('click', onClick);
+		elNp.addEventListener('click', onClick);
+		elNp.addEventListener('input', function (e) {
 			if (e.target.id === 'es-seekr' && audio.duration) { audio.currentTime = audio.duration * e.target.value / 1000; }
 			if (e.target.id === 'es-volr') { audio.volume = e.target.value / 100; store('vol', String(audio.volume)); }
 		});
 		audio.addEventListener('timeupdate', function () {
-			var c = elPlayer.querySelector('#es-cur'), d = elPlayer.querySelector('#es-dur'), s = elPlayer.querySelector('#es-seekr');
+			var f = audio.duration ? audio.currentTime / audio.duration : 0;
+			var mb = elPlayer.querySelector('#es-mbar'); if (mb) { mb.style.width = (f * 100) + '%'; }
+			var c = elNp.querySelector('#es-cur'), d = elNp.querySelector('#es-dur'), s = elNp.querySelector('#es-seekr');
 			if (c) { c.textContent = fmt(audio.currentTime); }
 			if (d) { d.textContent = fmt(audio.duration); }
-			if (s && audio.duration && document.activeElement !== s) { s.value = Math.round(audio.currentTime / audio.duration * 1000); }
+			if (s && audio.duration && document.activeElement !== s) { s.value = Math.round(f * 1000); }
 		});
 		audio.addEventListener('play', draw);
 		audio.addEventListener('pause', draw);
@@ -308,17 +467,20 @@
 		var v = parseFloat(store('vol')); if (v >= 0 && v <= 1) { audio.volume = v; }
 
 		return {
-			playList: function (items, i) { queue = items; qi = i; msg = ''; load(true); },
+			playList: function (items, i, cv, shuf) {
+				queue = items; qi = i; msg = ''; cover = cv || ''; shuffle = !!shuf;
+				if (shuf && items.length > 1) { qi = Math.floor(Math.random() * items.length); }
+				load(true);
+			},
 			currentPath: function () { var t = cur(); return t ? t.path : ''; },
-			pause: function () { audio.pause(); },
-			toast: function (m) { toast(m); }
+			pause: function () { audio.pause(); }
 		};
 	})();
 
-	/* ------------------------------------------------------------ mixer multitraccia (Web Audio) */
+	/* ------------------------------------------------------------ sessione di studio: mixer multitraccia (Web Audio) */
 	var Mixer = (function () {
 		var ctx = null, master = null, masterVol = 1;
-		var tracks = [], nextId = 1;
+		var tracks = [], nextId = 1, session = null;
 		var playing = false, pos = 0, t0 = 0, raf = 0, loop = false, mono = MOBILE;
 		var loadQ = [], loading = 0, built = false, browserMix = null;
 
@@ -463,10 +625,10 @@
 			return t;
 		}
 		function addPaths(items) {
-			if (!ensureCtx()) { Player.toast('Il tuo browser non supporta il mixer.'); return; }
-			if (!items.length) { Player.toast('Nessun file audio da aggiungere.'); return; }
+			if (!ensureCtx()) { toast('Il tuo browser non supporta il mixer.'); return; }
+			if (!items.length) { toast('Nessun file audio da aggiungere.'); return; }
 			var fresh = items.filter(function (it) { return !tracks.some(function (t) { return t.path === it.path; }); });
-			if (tracks.length + fresh.length > 32) { fresh = fresh.slice(0, Math.max(0, 32 - tracks.length)); Player.toast('Nel mixer entrano al massimo 32 tracce.'); }
+			if (tracks.length + fresh.length > 32) { fresh = fresh.slice(0, Math.max(0, 32 - tracks.length)); toast('Nel mixer entrano al massimo 32 tracce.'); }
 			fresh.forEach(function (it) {
 				var t = newTrack(baseName(it.name), it.folder);
 				t.path = it.path;
@@ -478,7 +640,8 @@
 						.catch(function (e) { t.status = 'err'; t.msg = 'Non riesco a leggerlo (' + (e && e.message ? e.message : 'errore') + ')'; throw e; });
 				});
 			});
-			showView('mix');
+			if (!session) { session = { name: 'Sessione libera', path: '' }; }
+			open();
 			redraw();
 			pump();
 		}
@@ -491,7 +654,8 @@
 						.catch(function (e) { t.status = 'err'; t.msg = 'Questo file non si può leggere'; throw e; });
 				});
 			});
-			showView('mix'); redraw(); pump();
+			if (!session) { session = { name: 'Sessione libera', path: '' }; }
+			open(); redraw(); pump();
 		}
 		function remove(id) {
 			var i = tracks.findIndex(function (t) { return t.id === id; });
@@ -504,15 +668,51 @@
 			redraw();
 		}
 
+		/* ---- sessione: si apre da un brano, non sta sempre in vista ---- */
+		function open() {
+			if (!built) { build(); }
+			elMix.classList.remove('es-hide');
+			document.body.classList.add('es-noscroll');
+			elSess.classList.add('es-hide');
+			redraw();
+		}
+		function close() {
+			pause();
+			elMix.classList.add('es-hide');
+			document.body.classList.remove('es-noscroll');
+			if (session) { elSess.classList.remove('es-hide'); elSess.textContent = '🎚 Sessione: ' + session.name; }
+		}
+		function end() {
+			if (tracks.length && !confirm('Terminare la sessione di studio? Le tracce vengono tolte dal mixer.')) { return; }
+			stop();
+			tracks.slice().forEach(function (t) { remove(t.id); });
+			session = null; elSess.classList.add('es-hide');
+			elMix.classList.add('es-hide'); document.body.classList.remove('es-noscroll');
+		}
+		function startSession(name, albumPath) {
+			if (session && session.path === albumPath && tracks.length) { open(); return; }
+			if (session && tracks.length && !confirm('C\'è già una sessione di studio aperta («' + session.name + '»). Sostituirla con «' + name + '»?')) { return; }
+			Player.pause();
+			if (tracks.length) { stop(); tracks.slice().forEach(function (t) { remove(t.id); }); }
+			session = { name: name, path: albumPath };
+			open();
+			audioIn(albumPath, 2).then(function (l) {
+				if (!l.length) { toast('In questa cartella non ci sono file audio.'); return; }
+				addPaths(l.map(function (f) { return toTrack(f, albumPath); }));
+			}).catch(function (e) { toast(e.message || 'Non riesco a leggere la cartella.'); });
+		}
+
 		/* ---- disegno ---- */
 		function build() {
 			elMix.innerHTML =
+				'<div class="es-sheet-h"><button class="es-btn" data-a="closemix">⌄ Chiudi</button><b>Sessione di studio <span class="es-sname" id="es-sname"></span></b>' +
+				'<button class="es-btn small" data-a="endmix">Termina sessione</button></div>' +
 				'<div class="es-mixwrap"><aside class="es-side es-card"><h3 class="es-h">Aggiungi tracce</h3><div id="es-browser-mix"></div>' +
 				'<div class="es-dz" id="es-dz">…oppure trascina qui dei file dal tuo computer<br><button class="es-btn small" id="es-pick" style="margin-top:8px">Scegli file</button>' +
 				'<input type="file" id="es-file" accept="audio/*" multiple class="es-hide"></div></aside>' +
 				'<div><div class="es-card"><div class="es-transport" id="es-tr"></div><div class="es-lanes" id="es-lanes"></div>' +
 				'<div class="es-dz" id="es-dz2">Trascina qui le tracce dall\'elenco, oppure premi ＋ accanto a un file o a una cartella.</div></div></div></div>';
-			browserMix = new Browser(elMix.querySelector('#es-browser-mix'), 'add', 'mixpath');
+			browserMix = new Browser(elMix.querySelector('#es-browser-mix'), 'mixpath');
 			built = true;
 			var drop = function (zone) {
 				zone.addEventListener('dragover', function (e) { e.preventDefault(); zone.classList.add('over'); });
@@ -524,8 +724,8 @@
 					if (!raw) { return; }
 					try {
 						var o = JSON.parse(raw);
-						if (o.dir) { audioIn(o.dir, 0).then(function (l) { addPaths(l.map(function (f) { return { path: f.path, name: f.name, folder: parentOf(f.path).split('/').pop() }; })); }); }
-						else { addPaths([{ path: o.path, name: o.name, folder: parentOf(o.path).split('/').pop() }]); }
+						if (o.dir) { audioIn(o.dir, 0).then(function (l) { addPaths(l.map(function (f) { return toTrack(f); })); }); }
+						else { addPaths([toTrack({ path: o.path, name: o.name })]); }
 					} catch (er) { /* dati non nostri */ }
 				});
 			};
@@ -537,7 +737,9 @@
 			setupLaneInteractions();
 		}
 		function redraw() {
-			if (!built) { build(); }
+			if (!built) { return; }
+			var sn = elMix.querySelector('#es-sname');
+			if (sn) { sn.textContent = session ? '· ' + session.name : ''; }
 			drawTransport();
 			var lanes = elMix.querySelector('#es-lanes');
 			var total = Math.max(duration(), 1);
@@ -580,6 +782,7 @@
 			}
 		}
 		function movePlayhead() {
+			if (!built) { return; }
 			var d = Math.max(duration(), 1);
 			var cur = playing ? Math.min(d, ctx.currentTime - t0) : pos;
 			var pct = Math.max(0, Math.min(100, cur / d * 100));
@@ -596,7 +799,7 @@
 				'<button class="es-btn' + (loop ? ' on' : '') + '" data-a="loop" title="Ripeti">⟲</button>' +
 				'<span class="es-time" id="es-t">' + fmt(playing ? ctx.currentTime - t0 : pos) + ' <small>/ ' + fmt(duration()) + '</small></span>' +
 				'<label class="es-master">Master <input type="range" min="0" max="120" value="' + Math.round(masterVol * 100) + '" data-k="master"></label>' +
-				'<button class="es-btn small" data-a="clear" title="Svuota il mixer">Svuota</button>' +
+				'<button class="es-btn small" data-a="clear" title="Togli tutte le tracce">Svuota</button>' +
 				'<label class="es-mem"><input type="checkbox" data-k="mono"' + (mono ? ' checked' : '') + '> Risparmia memoria (mono)</label>' +
 				'<span class="es-mem' + (mb > (MOBILE ? 350 : 1200) ? ' warn' : '') + '">Memoria: ' + Math.round(mb) + ' MB' + (mb > (MOBILE ? 350 : 1200) ? ' (tanta: togli qualche traccia)' : '') + '</span>';
 		}
@@ -608,12 +811,14 @@
 			var a = e.target.closest('[data-a]');
 			if (!a || a.closest('#es-browser-mix')) { return; }
 			var act = a.getAttribute('data-a'), id = laneId(e), t = byId(id);
-			if (act === 'play') { if (playing) { pause(); } else { play(); } }
+			if (act === 'closemix') { close(); }
+			else if (act === 'endmix') { end(); }
+			else if (act === 'play') { if (playing) { pause(); } else { play(); } }
 			else if (act === 'stop') { stop(); }
 			else if (act === 'loop') { loop = !loop; drawTransport(); }
 			else if (act === 'clear') { if (!tracks.length || confirm('Togliere tutte le tracce dal mixer?')) { stop(); tracks.slice().forEach(function (x) { remove(x.id); }); } }
 			else if (t && act === 'mute') { t.mute = !t.mute; a.classList.toggle('on', t.mute); applyGains(); }
-			else if (t && act === 'solo') { t.solo = !t.solo; a.classList.toggle('on', t.solo); [].forEach.call(elMix.querySelectorAll('.es-btn.solo'), function (b) { var tt = byId(parseInt(b.closest('.es-lane').getAttribute('data-id'), 10)); b.classList.toggle('on', !!(tt && tt.solo)); }); applyGains(); }
+			else if (t && act === 'solo') { t.solo = !t.solo; [].forEach.call(elMix.querySelectorAll('.es-btn.solo'), function (b) { var tt = byId(parseInt(b.closest('.es-lane').getAttribute('data-id'), 10)); b.classList.toggle('on', !!(tt && tt.solo)); }); applyGains(); }
 			else if (t && act === 'del') { remove(id); }
 			else if (t && act === 'zero') { t.offset = 0; if (playing) { startSources(pos = ctx.currentTime - t0); } redraw(); }
 		}
@@ -621,7 +826,7 @@
 			var k = e.target.getAttribute('data-k');
 			if (!k) { return; }
 			if (k === 'master') { masterVol = e.target.value / 100; if (master) { master.gain.setTargetAtTime(masterVol, ctx.currentTime, 0.015); } return; }
-			if (k === 'mono') { mono = e.target.checked; Player.toast(mono ? 'Le prossime tracce useranno meno memoria (mono).' : 'Le prossime tracce restano in stereo.'); return; }
+			if (k === 'mono') { mono = e.target.checked; toast(mono ? 'Le prossime tracce useranno meno memoria (mono).' : 'Le prossime tracce restano in stereo.'); return; }
 			var t = byId(laneId(e));
 			if (!t) { return; }
 			if (k === 'vol') { t.vol = e.target.value / 100; }
@@ -638,8 +843,7 @@
 				var box = e.target.closest('.es-wavebox');
 				if (!box) { return; }
 				var lane = box.closest('.es-lane'), t = byId(parseInt(lane.getAttribute('data-id'), 10));
-				var onWave = !!e.target.closest('.es-wave');
-				drag = { box: box, t: t, x0: e.clientX, off0: t ? t.offset : 0, moved: false, onWave: onWave, id: e.pointerId };
+				drag = { box: box, t: t, x0: e.clientX, off0: t ? t.offset : 0, moved: false, onWave: !!e.target.closest('.es-wave') };
 				try { box.setPointerCapture(e.pointerId); } catch (er) { /* non essenziale */ }
 			});
 			elMix.addEventListener('pointermove', function (e) {
@@ -684,14 +888,15 @@
 		document.addEventListener('keydown', function (e) {
 			if (elMix.classList.contains('es-hide') || e.target.matches('input, textarea, select')) { return; }
 			if (e.code === 'Space') { e.preventDefault(); if (playing) { pause(); } else { play(); } }
+			if (e.code === 'Escape') { close(); }
 		});
 		window.addEventListener('resize', function () { if (!elMix.classList.contains('es-hide')) { redraw(); } });
+		elSess.addEventListener('click', open);
 
-		return { addPaths: addPaths, pause: pause, redraw: redraw };
+		return { addPaths: addPaths, pause: pause, startSession: startSession };
 	})();
 
 	/* ------------------------------------------------------------ avvio */
-	var browserLib = new Browser(root.querySelector('#es-browser-lib'), 'play', 'libpath');
-	var v0 = store('view');
-	if (v0 === 'mix') { showView('mix'); }
+	var deep = /[?&]play=([^&]+)/.exec(location.search);
+	if (deep) { try { Lib.openFile(decodeURIComponent(deep[1])); } catch (e) { Lib.start(); } } else { Lib.start(); }
 })();

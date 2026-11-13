@@ -1,0 +1,86 @@
+/* EDITH Studio: player stile libreria musicale (album, mini-player, «In riproduzione», sessione di studio a tutto schermo). */
+body.es-noscroll { overflow: hidden; }
+#edithstudio .es-search {
+	margin-left: auto; flex: 1 1 220px; max-width: 360px; padding: 8px 14px; border-radius: 999px; color: var(--e-text);
+	background: rgba(3, 8, 18, 0.7); border: 1px solid var(--e-line); font: inherit; height: 36px;
+}
+#edithstudio .es-search:focus { outline: none; border-color: var(--e-amber); box-shadow: 0 0 0 2px rgba(255, 138, 31, 0.25); }
+#edithstudio .es-top #es-sess { background: linear-gradient(180deg, #ff9d3a, #c9540a); border-color: rgba(255, 190, 120, 0.6); color: #fff; }
+
+/* copertine */
+#edithstudio .es-art { position: relative; aspect-ratio: 1; border-radius: 12px; overflow: hidden; display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 26px rgba(0, 0, 0, 0.45); }
+#edithstudio .es-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+#edithstudio .es-art span { font-size: clamp(22px, 5vw, 44px); font-weight: 700; letter-spacing: 0.08em; color: rgba(255, 255, 255, 0.92); text-shadow: 0 2px 18px rgba(0, 0, 0, 0.5); }
+#edithstudio .es-art::after { content: ""; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12); pointer-events: none; }
+#edithstudio .es-art.tiny { width: 46px; height: 46px; border-radius: 8px; flex: none; box-shadow: none; }
+#edithstudio .es-art.tiny span { font-size: 15px; }
+#edithstudio .es-art.big { width: min(220px, 60vw); }
+#edithstudio .es-art.huge { width: min(380px, 78vw); margin: 0 auto; border-radius: 16px; }
+
+/* griglia di album */
+#edithstudio .es-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 18px; margin-top: 8px; }
+#edithstudio .es-card-album { background: none; border: 0; padding: 0; text-align: left; color: var(--e-text); display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+#edithstudio .es-card-album b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+#edithstudio .es-card-album .es-sub { color: var(--e-mute); font-size: 12px; margin-top: -6px; }
+#edithstudio .es-card-album .es-art { transition: transform 0.15s, box-shadow 0.15s; }
+#edithstudio .es-card-album:hover .es-art { box-shadow: 0 0 0 2px var(--e-amber), 0 10px 30px rgba(255, 138, 31, 0.3); transform: translateY(-2px); }
+
+/* pagina dell'album */
+#edithstudio .es-album { display: flex; gap: 22px; align-items: flex-end; flex-wrap: wrap; margin: 6px 0 18px; }
+#edithstudio .es-album-info { flex: 1 1 260px; min-width: 0; }
+#edithstudio .es-album-info small { color: var(--e-cyan); letter-spacing: 0.2em; text-transform: uppercase; font-size: 11px; }
+#edithstudio .es-album-info h2 { margin: 4px 0 6px; font-size: clamp(24px, 5vw, 38px); line-height: 1.1; color: #fff; text-shadow: 0 0 22px rgba(95, 216, 242, 0.3); overflow-wrap: anywhere; }
+#edithstudio .es-album-info p { margin: 0 0 14px; color: var(--e-mute); }
+#edithstudio .es-album-btn { display: flex; gap: 8px; flex-wrap: wrap; }
+#edithstudio .es-tracks { list-style: none; margin: 0 0 6px; padding: 0; }
+#edithstudio .es-trk { display: flex; align-items: center; gap: 12px; padding: 10px 8px; border-top: 1px solid rgba(95, 216, 242, 0.1); border-radius: 8px; cursor: pointer; }
+#edithstudio .es-trk:hover { background: rgba(95, 216, 242, 0.07); }
+#edithstudio .es-trk.now { background: rgba(255, 138, 31, 0.14); color: #ffd9a8; }
+#edithstudio .es-trk .es-n, #edithstudio .es-qlist .es-n { width: 26px; text-align: center; color: var(--e-mute); flex: none; font-variant-numeric: tabular-nums; }
+#edithstudio .es-trk.now .es-n { color: var(--e-amber); }
+#edithstudio .es-trk .es-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#edithstudio .es-trk .es-size { color: var(--e-mute); font-size: 12px; }
+#edithstudio .es-gh { margin: 22px 0 4px; font-size: 13px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--e-cyan); }
+#edithstudio .es-gh small { color: var(--e-mute); letter-spacing: 0.05em; text-transform: none; margin-left: 6px; }
+
+/* mini-player */
+#edithstudio .es-mini { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; background: rgba(5, 11, 23, 0.95); border-top: 1px solid var(--e-line); box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.5); backdrop-filter: blur(10px); padding-bottom: env(safe-area-inset-bottom); }
+#edithstudio .es-mini-bar { height: 3px; background: rgba(95, 216, 242, 0.15); }
+#edithstudio .es-mini-bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--e-cyan), var(--e-amber)); }
+#edithstudio .es-mini-in { display: flex; align-items: center; gap: 12px; max-width: 1200px; margin: 0 auto; padding: 8px 14px; }
+#edithstudio .es-mini-info { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; background: none; border: 0; padding: 0; color: var(--e-text); text-align: left; }
+#edithstudio .es-mini-info .es-now { min-width: 0; flex: 1; }
+#edithstudio .es-now b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#edithstudio .es-now small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--e-mute); }
+#edithstudio .es-ctl { display: flex; gap: 6px; flex: none; }
+@media (max-width: 480px) { #edithstudio .es-ctl .es-btn:first-child { display: none; } }
+
+/* fogli a tutto schermo: «In riproduzione» e sessione di studio */
+#edithstudio .es-sheet {
+	position: fixed; inset: 0; z-index: 50; overflow: auto; padding: 14px 14px 40px; color: var(--e-text); background-color: var(--e-void);
+	background-image: radial-gradient(900px 520px at 92% -10%, rgba(255, 138, 31, 0.34), transparent 62%), radial-gradient(760px 460px at -6% 108%, rgba(60, 170, 230, 0.24), transparent 60%),
+		linear-gradient(rgba(95, 216, 242, 0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(95, 216, 242, 0.045) 1px, transparent 1px);
+	background-size: auto, auto, 38px 38px, 38px 38px;
+}
+#edithstudio .es-sheet-h { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
+#edithstudio .es-sheet-h b { letter-spacing: 0.14em; text-transform: uppercase; font-size: 13px; color: var(--e-cyan); }
+#edithstudio .es-sname { color: #fff; letter-spacing: 0.04em; text-transform: none; font-size: 14px; }
+#edithstudio .es-np { z-index: 55; }
+#edithstudio #es-mixer { z-index: 60; }
+#edithstudio .es-np-body { display: grid; grid-template-columns: 1fr; gap: 22px; max-width: 1050px; margin: 0 auto; }
+@media (min-width: 900px) { #edithstudio .es-np-body { grid-template-columns: minmax(0, 420px) minmax(0, 1fr); gap: 40px; } }
+#edithstudio .es-np-main { display: flex; flex-direction: column; gap: 16px; align-items: stretch; }
+#edithstudio .es-np-t { text-align: center; }
+#edithstudio .es-np-t h2 { margin: 6px 0 2px; font-size: 22px; color: #fff; overflow-wrap: anywhere; }
+#edithstudio .es-np-t p { margin: 0; color: var(--e-mute); }
+#edithstudio .es-npctl { display: flex; justify-content: center; align-items: center; gap: 10px; }
+#edithstudio .es-npctl .es-btn { height: 44px; min-width: 44px; font-size: 18px; border-radius: 50%; padding: 0; }
+#edithstudio .es-npctl .es-btn.big { height: 62px; min-width: 62px; font-size: 24px; }
+#edithstudio .es-npvol { display: flex; gap: 10px; align-items: center; justify-content: center; }
+#edithstudio .es-npvol input { max-width: 220px; }
+#edithstudio .es-qlist { list-style: none; margin: 0; padding: 0; }
+#edithstudio .es-qlist li { display: flex; gap: 10px; padding: 9px 8px; border-top: 1px solid rgba(95, 216, 242, 0.1); cursor: pointer; border-radius: 8px; }
+#edithstudio .es-qlist li:hover { background: rgba(95, 216, 242, 0.07); }
+#edithstudio .es-qlist .es-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#edithstudio .es-seek { display: flex; align-items: center; gap: 8px; }
+#edithstudio .es-seek span { font-size: 12px; color: var(--e-mute); font-variant-numeric: tabular-nums; flex: none; }

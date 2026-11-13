@@ -26,6 +26,7 @@ class PageController extends Controller {
 	#[NoCSRFRequired]
 	public function index(): TemplateResponse {
 		Util::addStyle(Application::APP_ID, 'studio');
+		Util::addStyle(Application::APP_ID, 'player');
 		Util::addScript(Application::APP_ID, 'studio');
 		$user = $this->userSession->getUser();
 		return new TemplateResponse(Application::APP_ID, 'main', [
