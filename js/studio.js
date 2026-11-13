@@ -237,7 +237,8 @@
 			var now = Player.currentPath() === f.path;
 			return '<li class="es-trk' + (now ? ' now' : '') + '" data-a="play" data-g="' + group + '" data-i="' + i + '"><span class="es-n">' + (now ? '♪' : (i + 1)) + '</span>' +
 				'<span class="es-name">' + esc(baseName(f.name)) + '</span><span class="es-size">' + esc(fmtSize(f.size)) + '</span>' +
-				'<button class="es-btn small es-share" data-a="share" data-g="' + group + '" data-i="' + i + '" title="Copia il link di ascolto (solo questo brano)">🔗</button></li>';
+				'<button class="es-btn small es-share" data-a="share" data-g="' + group + '" data-i="' + i + '" title="Copia il link di ascolto (solo questo brano)">🔗</button>' +
+				'<button class="es-btn small es-more" data-a="menu" data-g="' + group + '" data-i="' + i + '" title="Altre azioni (anche tasto destro)">⋯</button></li>';
 		}
 
 		function draw() {
@@ -255,7 +256,8 @@
 					h += '<section class="es-album"><div class="es-album-art">' + art(title, cover, 'big') + '</div><div class="es-album-info"><small>Brano</small><h2>' + esc(title) + '</h2>' +
 						'<p>' + files.length + (files.length === 1 ? ' file' : ' file') + (nStem ? ' · ' + nStem + ' tracce separate' : '') + '</p>' +
 						'<div class="es-album-btn"><button class="es-btn pri" data-a="playall">▶ Riproduci</button><button class="es-btn" data-a="shuffleall">⤮ Casuale</button>' +
-						'<button class="es-btn" data-a="study" title="Apre il mixer con tutte le tracce di questo brano">🎚 Sessione di studio</button></div></div></section>';
+						'<button class="es-btn" data-a="study" title="Apre il mixer con tutte le tracce di questo brano">🎚 Sessione di studio</button>' +
+							'<button class="es-btn" data-a="amenu" title="Altre azioni su questa cartella">⋯</button></div></div></section>';
 					h += '<ul class="es-tracks">' + files.map(function (f, i) { return row(f, i, 'main'); }).join('') + '</ul>';
 					groups.forEach(function (g, gi) {
 						var gf = g.files.filter(function (f) { return matches(f.name) || matches(g.dir.name); });
@@ -316,7 +318,15 @@
 				else { toast('Non trovo questo file (forse è stato spostato o non hai accesso).'); }
 			});
 		}
-		return { go: go, draw: draw, openFile: openFile, start: function () { go(path); } };
+		return {
+			go: go, draw: draw, openFile: openFile, start: function () { go(path); },
+			path: function () { return path; }, reload: function () { go(path); },
+			/* la riga (gruppo, posizione) con tutto cio' che serve al menu */
+			rowInfo: function (group, i) {
+				var vis = listFor(group).filter(function (f) { return matches(f.name); });
+				return vis[i] ? { f: vis[i], list: vis, idx: i, album: path, cover: cover } : null;
+			}
+		};
 	})();
 
 	/* ------------------------------------------------------------ navigatore di cartelle (solo per aggiungere tracce al mixer) */
@@ -581,7 +591,13 @@
 				load(true);
 			},
 			currentPath: function () { var t = cur(); return t ? t.path : ''; },
-			pause: function () { audio.pause(); }
+			pause: function () { audio.pause(); },
+			current: function () { return cur(); },
+			/* "Riproduci dopo": mette il brano subito dopo quello in corso */
+			playNext: function (t) {
+				if (!queue.length) { queue = [t]; qi = 0; msg = ''; cover = ''; load(true); return; }
+				queue.splice(qi + 1, 0, t); toast('Aggiunto: parte dopo il brano in corso.'); if (npOpen()) { drawNp(); }
+			}
 		};
 	})();
 
@@ -1037,7 +1053,200 @@
 		window.addEventListener('resize', function () { if (!elMix.classList.contains('es-hide')) { redraw(); } });
 		elSess.addEventListener('click', open);
 
-		return { addPaths: addPaths, pause: pause, startSession: startSession };
+		return { addPaths: addPaths, pause: pause, startSession: startSession, open: open };
+	})();
+
+
+	/* ------------------------------------------------------------ menu del tasto destro (come Files di Nextcloud) */
+	var Ctx = (function () {
+		var el = null;
+		function close() { if (el) { el.remove(); el = null; } }
+
+		function show(x, y, items) {
+			close();
+			el = document.createElement('div');
+			el.className = 'es-ctx'; el.setAttribute('role', 'menu');
+			items.forEach(function (it) {
+				if (it === '-') { el.appendChild(document.createElement('hr')); return; }
+				var b = document.createElement('button');
+				b.type = 'button'; b.setAttribute('role', 'menuitem');
+				b.className = it.danger ? 'danger' : '';
+				b.innerHTML = '<span class="es-ci">' + it.icon + '</span><span>' + esc(it.label) + '</span>';
+				b.addEventListener('click', function (e) { e.stopPropagation(); close(); it.run(); });
+				el.appendChild(b);
+			});
+			root.appendChild(el);
+			var r = el.getBoundingClientRect();
+			el.style.left = Math.max(8, Math.min(x, window.innerWidth - r.width - 8)) + 'px';
+			el.style.top = Math.max(8, Math.min(y, window.innerHeight - r.height - 8)) + 'px';
+			var first = el.querySelector('button'); if (first) { first.focus(); }
+		}
+
+		/* piccola finestra di dialogo dentro la pagina (niente finestre del browser) */
+		function ask(o) {
+			return new Promise(function (resolve) {
+				var d = document.createElement('div');
+				d.className = 'es-dlg';
+				d.innerHTML = '<div class="es-dbox" role="dialog" aria-modal="true"><h3>' + esc(o.title) + '</h3>' + (o.text ? '<p>' + esc(o.text) + '</p>' : '') +
+					(o.input != null ? '<input type="text" class="es-dinput" value="' + esc(o.input) + '" autocomplete="off" spellcheck="false">' : '') +
+					'<div class="es-dbtn"><button type="button" class="es-btn" data-d="no">Annulla</button><button type="button" class="es-btn ' + (o.danger ? 'danger' : 'pri') + '" data-d="ok">' + esc(o.ok || 'OK') + '</button></div></div>';
+				root.appendChild(d);
+				var inp = d.querySelector('input');
+				function done(v) { document.removeEventListener('keydown', key, true); d.remove(); resolve(v); }
+				function key(e) {
+					if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done(null); }
+					else if (e.key === 'Enter' && !(e.target.closest && e.target.closest('button'))) { e.preventDefault(); e.stopPropagation(); done(inp ? inp.value : ''); }
+					else { e.stopPropagation(); }
+				}
+				document.addEventListener('keydown', key, true);
+				d.addEventListener('click', function (e) {
+					var b = e.target.closest('[data-d]');
+					if (b) { done(b.getAttribute('data-d') === 'ok' ? (inp ? inp.value : '') : null); }
+					else if (e.target === d) { done(null); }
+				});
+				if (inp) { inp.focus(); var dot = inp.value.lastIndexOf('.'); inp.setSelectionRange(0, o.selectBase && dot > 0 ? dot : inp.value.length); }
+				else { d.querySelector('[data-d="ok"]').focus(); }
+			});
+		}
+
+		/* scritture su Nextcloud (WebDAV): servono sessione e intestazioni di sicurezza; l'eliminazione va nel Cestino */
+		function dav(method, p, extra) {
+			var h = { 'OCS-APIRequest': 'true', 'requesttoken': reqToken() };
+			Object.keys(extra || {}).forEach(function (k) { h[k] = extra[k]; });
+			return fetch(fileUrl(p), { method: method, credentials: 'same-origin', headers: h }).then(function (r) {
+				if (r.status === 412) { throw new Error('Esiste già qualcosa con questo nome.'); }
+				if (r.status === 403) { throw new Error('Non hai il permesso di farlo.'); }
+				if (r.status === 404) { throw new Error('Non lo trovo più (forse è già stato spostato).'); }
+				if (!r.ok) { throw new Error('Nextcloud ha risposto con un errore (' + r.status + ').'); }
+				return r;
+			});
+		}
+		function after(removedPath) {
+			var cur = Lib.path();
+			if (removedPath && (cur === removedPath || cur.indexOf(removedPath + '/') === 0)) { Lib.go(parentOf(removedPath) || '/'); } else { Lib.reload(); }
+		}
+		function doRename(it, isDir) {
+			ask({ title: isDir ? 'Rinomina la cartella' : 'Rinomina il file', text: 'Nuovo nome:', input: it.name, ok: 'Rinomina', selectBase: !isDir }).then(function (v) {
+				if (v == null) { return; }
+				var nn = v.trim();
+				if (!nn || nn === it.name) { return; }
+				if (/[\/\\]/.test(nn) || nn === '.' || nn === '..') { toast('Il nome non può contenere / né \\.'); return; }
+				var m = /\.[A-Za-z0-9]{1,5}$/.exec(it.name);
+				if (!isDir && m && !/\.[A-Za-z0-9]{1,5}$/.test(nn)) { nn += m[0]; }
+				var dest = (parentOf(it.path) === '/' ? '' : parentOf(it.path)) + '/' + nn;
+				dav('MOVE', it.path, { 'Destination': location.origin + fileUrl(dest), 'Overwrite': 'F' }).then(function () {
+					toast('Rinominato in «' + nn + '».');
+					if (isDir && Lib.path() === it.path) { Lib.go(dest); } else { Lib.reload(); }
+				}).catch(function (e) { toast(e.message); });
+			});
+		}
+		function doDelete(it, isDir) {
+			ask({
+				title: isDir ? 'Eliminare la cartella «' + it.name + '»?' : 'Eliminare «' + it.name + '»?',
+				text: (isDir ? 'Va nel Cestino di Nextcloud con tutto quello che contiene.' : 'Va nel Cestino di Nextcloud.') + ' Si può recuperare da lì.',
+				ok: 'Elimina', danger: true
+			}).then(function (v) {
+				if (v == null) { return; }
+				dav('DELETE', it.path).then(function () { toast('«' + it.name + '» è nel Cestino.'); after(isDir ? it.path : ''); }).catch(function (e) { toast(e.message); });
+			});
+		}
+		function download(f) {
+			var a = document.createElement('a');
+			a.href = fileUrl(f.path); a.download = f.name; a.rel = 'noopener';
+			document.body.appendChild(a); a.click(); a.remove();
+		}
+		function inFiles(dir) { window.open(WEB + '/index.php/apps/files/files?dir=' + encodeURIComponent(dir || '/'), '_blank', 'noopener'); }
+
+		/* voci per un file; ctx dice come riprodurlo (lista e posizione) */
+		function fileItems(f, ctx) {
+			return [
+				{ icon: '▶', label: 'Riproduci', run: function () { Player.playList(ctx.list.map(function (x) { return toTrack(x, ctx.album); }), ctx.idx, ctx.cover); } },
+				{ icon: '⏭', label: 'Riproduci dopo', run: function () { Player.playNext(toTrack(f, ctx.album)); } },
+				{ icon: '🎚', label: 'Aggiungi alla sessione di studio', run: function () { Mixer.addPaths([toTrack(f, ctx.album)]); Mixer.open(); } },
+				'-',
+				{ icon: '⬇', label: 'Scarica', run: function () { download(f); } },
+				{ icon: '🔗', label: 'Copia link di ascolto', run: function () { shareFile(f.path); } },
+				{ icon: '📂', label: 'Mostra in Files', run: function () { inFiles(parentOf(f.path)); } },
+				'-',
+				{ icon: '✏️', label: 'Rinomina', run: function () { doRename(f, false); } },
+				{ icon: '🗑', label: 'Elimina', danger: true, run: function () { doDelete(f, false); } }
+			];
+		}
+		function dirItems(d, isRoot) {
+			if (isRoot) { return [{ icon: '↗', label: 'Mostra in Files', run: function () { inFiles('/'); } }]; }
+			return [
+				{ icon: '📂', label: 'Apri', run: function () { Lib.go(d.path); window.scrollTo(0, 0); } },
+				{ icon: '🎚', label: 'Sessione di studio', run: function () { Mixer.startSession(d.name, d.path); } },
+				{ icon: '↗', label: 'Mostra in Files', run: function () { inFiles(d.path); } },
+				'-',
+				{ icon: '✏️', label: 'Rinomina', run: function () { doRename(d, true); } },
+				{ icon: '🗑', label: 'Elimina cartella', danger: true, run: function () { doDelete(d, true); } }
+			];
+		}
+		function openRow(row, x, y) {
+			var info = Lib.rowInfo(row.getAttribute('data-g'), parseInt(row.getAttribute('data-i'), 10));
+			if (info) { show(x, y, fileItems(info.f, info)); }
+		}
+		function openCard(card, x, y) {
+			var p = card.getAttribute('data-dir');
+			show(x, y, dirItems({ path: p, name: lastName(p) }, false));
+		}
+		function openCurrentTrack(x, y) {
+			var t = Player.current();
+			if (!t) { return; }
+			var f = { path: t.path, name: t.name, size: 0 };
+			show(x, y, fileItems(f, { list: [f], idx: 0, album: t.album, cover: '' }).slice(1));
+		}
+
+		/* tasto destro */
+		root.addEventListener('contextmenu', function (e) {
+			if (e.target.closest('.es-ctx, .es-dlg, input, textarea')) { return; }
+			var row = e.target.closest('.es-trk'), card = e.target.closest('.es-card-album[data-dir]');
+			if (row) { e.preventDefault(); openRow(row, e.clientX, e.clientY); }
+			else if (card) { e.preventDefault(); openCard(card, e.clientX, e.clientY); }
+			else if (e.target.closest('.es-mini-info, .es-np-main .es-art')) { e.preventDefault(); openCurrentTrack(e.clientX, e.clientY); }
+		});
+		/* pulsante con i tre puntini */
+		root.addEventListener('click', function (e) {
+			var b = e.target.closest('[data-a="menu"], [data-a="amenu"]');
+			if (!b) { return; }
+			e.stopPropagation();
+			var r = b.getBoundingClientRect();
+			if (b.getAttribute('data-a') === 'menu') { openRow(b.closest('.es-trk') || b, r.left, r.bottom + 4); }
+			else { var p = Lib.path(); show(r.left, r.bottom + 4, dirItems({ path: p, name: lastName(p) || 'Tutti i file' }, p === '/')); }
+		}, true);
+		/* pressione lunga sul telefono */
+		var lp = 0, lpFired = false, lpX = 0, lpY = 0;
+		root.addEventListener('pointerdown', function (e) {
+			if (e.pointerType !== 'touch' || e.target.closest('button, .es-ctx, .es-dlg')) { return; }
+			var t = e.target.closest('.es-trk, .es-card-album[data-dir]');
+			if (!t) { return; }
+			lpX = e.clientX; lpY = e.clientY; lpFired = false;
+			clearTimeout(lp);
+			lp = setTimeout(function () {
+				lpFired = true;
+				if (t.classList.contains('es-trk')) { openRow(t, lpX, lpY); } else { openCard(t, lpX, lpY); }
+				if (navigator.vibrate) { try { navigator.vibrate(15); } catch (er) { /* niente */ } }
+			}, 550);
+		});
+		root.addEventListener('pointermove', function (e) { if (lp && (Math.abs(e.clientX - lpX) > 10 || Math.abs(e.clientY - lpY) > 10)) { clearTimeout(lp); lp = 0; } });
+		['pointerup', 'pointercancel'].forEach(function (n) { root.addEventListener(n, function () { clearTimeout(lp); lp = 0; }, true); });
+		document.addEventListener('scroll', function () { clearTimeout(lp); lp = 0; close(); }, true);
+		root.addEventListener('click', function (e) { if (lpFired) { lpFired = false; e.stopPropagation(); e.preventDefault(); } }, true);
+
+		/* chiusura */
+		document.addEventListener('pointerdown', function (e) { if (el && !e.target.closest('.es-ctx')) { close(); } }, true);
+		window.addEventListener('resize', close);
+		document.addEventListener('keydown', function (e) {
+			if (!el) { return; }
+			if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); return; }
+			if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+				e.preventDefault(); e.stopPropagation();
+				var bs = [].slice.call(el.querySelectorAll('button')), i = bs.indexOf(document.activeElement);
+				bs[(i + (e.key === 'ArrowDown' ? 1 : -1) + bs.length) % bs.length].focus();
+			}
+		}, true);
+		return { close: close };
 	})();
 
 	/* ------------------------------------------------------------ avvio */

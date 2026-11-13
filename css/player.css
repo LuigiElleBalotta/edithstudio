@@ -130,3 +130,35 @@ body.es-noscroll { overflow: hidden; }
 #edithstudio .es-seek input:hover::-webkit-slider-runnable-track, #edithstudio .es-seek input:active::-webkit-slider-runnable-track { height: 8px; }
 #edithstudio .es-seek input::-webkit-slider-thumb { width: 16px; height: 16px; margin-top: -5px; }
 #edithstudio .es-npvol input { max-width: 200px; }
+
+/* ---- menu del tasto destro e finestra di conferma ---- */
+#edithstudio .es-ctx {
+	position: fixed; z-index: 95; min-width: 230px; max-width: calc(100vw - 16px); padding: 6px; border-radius: 12px;
+	background: rgba(10, 22, 40, 0.97); border: 1px solid var(--e-line); box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 138, 31, 0.12);
+	backdrop-filter: blur(10px);
+}
+#edithstudio .es-ctx button {
+	display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 12px; border: 0; border-radius: 8px; background: transparent;
+	color: var(--e-text); font: inherit; font-size: 14px; text-align: left; cursor: pointer; height: auto; min-height: 36px;
+}
+#edithstudio .es-ctx button:hover, #edithstudio .es-ctx button:focus { background: rgba(95, 216, 242, 0.12); outline: none; }
+#edithstudio .es-ctx button.danger { color: #ff8c82; }
+#edithstudio .es-ctx button.danger:hover, #edithstudio .es-ctx button.danger:focus { background: rgba(255, 90, 80, 0.16); }
+#edithstudio .es-ctx .es-ci { width: 22px; text-align: center; flex: none; }
+#edithstudio .es-ctx hr { border: 0; border-top: 1px solid rgba(95, 216, 242, 0.14); margin: 5px 4px; }
+#edithstudio .es-more { margin-left: 2px; }
+#edithstudio .es-trk .es-share, #edithstudio .es-trk .es-more { opacity: 0.55; }
+#edithstudio .es-trk:hover .es-share, #edithstudio .es-trk:hover .es-more, #edithstudio .es-trk .es-share:focus, #edithstudio .es-trk .es-more:focus { opacity: 1; }
+@media (hover: none) { #edithstudio .es-trk .es-share, #edithstudio .es-trk .es-more { opacity: 0.9; } }
+
+#edithstudio .es-dlg { position: fixed; inset: 0; z-index: 110; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(2, 6, 14, 0.7); backdrop-filter: blur(3px); }
+#edithstudio .es-dbox { width: min(440px, 100%); padding: 20px; border-radius: 16px; background: rgba(12, 26, 46, 0.98); border: 1px solid var(--e-line); box-shadow: 0 24px 70px rgba(0, 0, 0, 0.65); }
+#edithstudio .es-dbox h3 { margin: 0 0 8px; font-size: 17px; color: #fff; overflow-wrap: anywhere; }
+#edithstudio .es-dbox p { margin: 0 0 12px; color: var(--e-mute); }
+#edithstudio .es-dinput {
+	width: 100%; box-sizing: border-box; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--e-line); background: rgba(3, 8, 18, 0.8);
+	color: var(--e-text); font: inherit; height: 42px; margin-bottom: 4px;
+}
+#edithstudio .es-dinput:focus { outline: none; border-color: var(--e-amber); box-shadow: 0 0 0 2px rgba(255, 138, 31, 0.25); }
+#edithstudio .es-dbtn { display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px; }
+#edithstudio .es-btn.danger { background: linear-gradient(180deg, #e0463c, #a01f17); border-color: rgba(255, 140, 130, 0.6); color: #fff; }

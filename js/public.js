@@ -22,7 +22,7 @@
 	document.title = title + ' · EDITH Studio';
 
 	root.innerHTML =
-		'<main class="ep-wrap"><div class="ep-card">' +
+		'<div class="ep-wrap"><div class="ep-card">' +
 		'<div class="ep-art" style="background:linear-gradient(135deg,hsl(' + hue + ',62%,38%),hsl(' + hue2 + ',70%,22%))"><span>' + esc(initials) + '</span></div>' +
 		'<h1>' + esc(title) + '</h1>' +
 		'<p class="ep-sub">Brano condiviso con te' + (SIZE ? ' · ' + esc(mb(SIZE)) : '') + '</p>' +
@@ -34,8 +34,8 @@
 		'<div class="ep-vol"><span>🔈</span><input id="ep-volr" type="range" min="0" max="100" value="100" aria-label="Volume"></div>' +
 		'<p class="ep-err" id="ep-err" hidden>Non riesco a suonare questo file. Il link potrebbe essere scaduto o il formato non è supportato dal tuo browser.</p>' +
 		(HIDE_DL ? '' : '<a class="ep-dl" href="' + esc(SRC) + '" download="' + esc(NAME) + '">⬇ Scarica il file</a>') +
-		'</div><footer class="ep-foot"><b>EDITH</b> Studio · solo ascolto · ' +
-		'<a href="' + esc(WEB + '/apps/edithstudio/') + '">Accedi</a></footer></main>';
+		'</div><div class="ep-foot"><b>EDITH</b> Studio · solo ascolto · ' +
+		'<a href="' + esc(WEB + '/apps/edithstudio/') + '">Accedi</a></div></div>';
 
 	var au = document.getElementById('ep-au');
 	var bar = document.getElementById('ep-bar');
