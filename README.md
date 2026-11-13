@@ -41,3 +41,7 @@ Mixer: Spazio, ← → ±5 s (Maiusc ±15), J −10 s, Home/End, L ripeti, 1-9 m
 Su file e cartelle (e col pulsante ⋯, o pressione lunga sul telefono): Riproduci, Riproduci dopo, Aggiungi alla sessione
 di studio, Scarica, Copia link di ascolto, Mostra in Files, Rinomina, Elimina. L'eliminazione va nel **Cestino** di
 Nextcloud e chiede sempre conferma.
+
+## Apri dai File
+
+Nell'app File un clic su un file audio lo apre nel player di EDITH Studio (azione predefinita, priorita' piu' alta di quella di Music). Resta nel menu anche come "Apri con EDITH Studio".
