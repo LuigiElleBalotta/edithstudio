@@ -3,13 +3,16 @@
       xsi:noNamespaceSchemaLocation="https://apps.nextcloud.com/schema/apps/info.xsd">
 	<id>edithstudio</id>
 	<name>EDITH Studio</name>
-	<summary>Lettore e mixer multitraccia per studiare i brani della band</summary>
+	<summary>Lettore, playlist e mixer multitraccia per studiare i brani della band</summary>
 	<description><![CDATA[Un lettore musicale che segue le cartelle di Nextcloud (una cartella per brano, con il mix completo e sottocartelle di tracce) e un mixer multitraccia in stile DAW: importi le tracce, le sposti, alzi il volume, le silenzi, le isoli e le panni, per studiare il brano. Nessuna libreria da scansionare: legge direttamente i file che carichi.]]></description>
-	<version>0.3.0</version>
+	<version>0.4.0</version>
 	<licence>agpl</licence>
 	<author>EDITH Studio</author>
 	<namespace>EdithStudio</namespace>
 	<category>multimedia</category>
+	<website>https://github.com/LuigiElleBalotta/edithstudio</website>
+	<bugs>https://github.com/LuigiElleBalotta/edithstudio/issues</bugs>
+	<repository type="git">https://github.com/LuigiElleBalotta/edithstudio.git</repository>
 	<dependencies>
 		<nextcloud min-version="33" max-version="35"/>
 	</dependencies>

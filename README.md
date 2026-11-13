@@ -51,3 +51,36 @@ Nota: dai File lo Studio si apre in una finestra sopra la pagina (iframe con `?e
 ## Licenza
 
 GNU AGPL-3.0 (vedi `LICENSE`), come richiesto per le app Nextcloud. Copyright (c) 2026 Luigi Balotta.
+
+## Tag e copertine
+
+Titolo, artista, album e copertina si leggono **dentro ai file** (MP3 con ID3 v2.2/2.3/2.4 e FLAC con commenti Vorbis e immagine).
+Si scarica solo l'inizio del file, mai il brano intero (serve il supporto alle richieste parziali, vedi sopra). Se la cartella
+ha `cover.jpg` (o `folder`, `front`, `copertina`...) vince quella; altrimenti si usa la copertina del primo brano. Senza tag
+resta il nome del file. In sola lettura: i file non vengono mai modificati.
+
+## Playlist
+
+Per ogni utente: «♫ Playlist» in alto, tasto destro su un brano o su una cartella → «Aggiungi a una playlist…». Si possono
+rinominare, riordinare e togliere brani. Una playlist contiene solo riferimenti ai file: chi non vede un file, non lo sente.
+I dati stanno nella cartella dati dell'app (`appdata`), uno per utente, non in `Files`.
+
+## Sessioni del mixer salvate
+
+«💾 Salva» nel mixer registra tracce, volumi, bilanciamento, mute/solo, spostamenti, master e ripeti; «🎚 Sessioni» in alto
+(o «📂 Sessioni salvate» nel mixer) le riapre. Le tracce caricate dal proprio computer non si possono salvare.
+
+## Dal telefono: Subsonic e Ampache
+
+I due protocolli li fornisce l'app **Music** di Nextcloud (da attivare). «📱 Telefono» mostra gli indirizzi, l'utente e permette
+di creare e revocare le **chiavi** da usare come password nelle app (Symfonium, Substreamer, Amperfy, DSub, Ultrasonic...).
+Col tasto destro su una cartella → «Nascondi o mostra nelle app del telefono» si escludono dalla libreria di Music le
+cartelle delle tracce separate (Batteria, Chitarre...). Music riscansiona da solo; se mancano brani, «Riscansiona» in Music.
+
+## Sviluppo
+
+- `.github/workflows/ci.yml`: sintassi PHP e JavaScript, `info.xml` contro lo schema ufficiale di Nextcloud, nessun segreto/IP/email
+  (`python3 scripts/check_privacy.py`). Le azioni sono fissate a una versione precisa; Dependabot le aggiorna.
+- `.github/workflows/release.yml`: con un tag `vX.Y.Z` uguale alla versione di `appinfo/info.xml` costruisce il pacchetto
+  `edithstudio-X.Y.Z.tar.gz` (con somma di controllo) e crea la release.
+- Installazione manuale: scompatta in `custom_apps/edithstudio`, poi `occ app:enable edithstudio`.

@@ -169,3 +169,28 @@ html.es-embed body, html.es-embed #content { margin: 0 !important; padding-top: 
 html.es-embed #content { height: 100vh !important; max-height: none !important; }
 html.es-embed #edithstudio { min-height: 100vh; }
 html.es-embed #edithstudio .es-top { padding-right: 230px; }
+
+/* ---- playlist, sessioni salvate, telefono, tag ---- */
+#edithstudio .es-sub2 { color: var(--e-mute); font-size: 12px; }
+#edithstudio .es-hbtn { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+#edithstudio .es-top > .es-btn { height: 36px; white-space: nowrap; }
+#edithstudio .es-card-album.es-new .es-art { background: rgba(95, 216, 242, 0.06); border: 1px dashed var(--e-line); box-shadow: none; }
+#edithstudio .es-card-album.es-new .es-art span { font-size: 44px; color: var(--e-cyan); }
+
+#edithstudio .es-dlist, #edithstudio .es-dphone { max-height: calc(100vh - 32px); overflow: auto; }
+#edithstudio .es-dphone { width: min(620px, 100%); }
+#edithstudio .es-dl { list-style: none; margin: 0 0 10px; padding: 0; max-height: 46vh; overflow: auto; }
+#edithstudio .es-dl li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 4px; border-top: 1px solid rgba(95, 216, 242, 0.12); }
+#edithstudio .es-dl-l { min-width: 0; display: flex; flex-direction: column; }
+#edithstudio .es-dl-l b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+#edithstudio .es-dl-l small { color: var(--e-mute); }
+#edithstudio .es-dl-b { display: flex; gap: 6px; flex: none; }
+#edithstudio .es-dnew { display: flex; gap: 8px; margin: 8px 0 4px; }
+#edithstudio .es-dnew .es-dinput { margin: 0; flex: 1; }
+#edithstudio .es-kv { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+#edithstudio .es-kv span { flex: none; width: 150px; color: var(--e-mute); font-size: 13px; }
+#edithstudio .es-kv code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; user-select: all; padding: 6px 8px; border-radius: 8px; background: rgba(3, 8, 18, 0.8); border: 1px solid var(--e-line); color: var(--e-text); font-size: 13px; }
+#edithstudio .es-hint { color: var(--e-mute); font-size: 13px; margin: 12px 0 0; }
+#edithstudio .es-newkey { margin: 10px 0 0; padding: 10px; border-radius: 10px; border: 1px solid rgba(255, 154, 46, 0.5); background: rgba(255, 138, 31, 0.08); }
+#edithstudio .es-newkey b { display: block; color: #ffd9a8; margin-bottom: 4px; }
+@media (max-width: 560px) { #edithstudio .es-kv { flex-wrap: wrap; } #edithstudio .es-kv span { width: 100%; } }

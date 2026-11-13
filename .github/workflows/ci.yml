@@ -1,0 +1,76 @@
+name: CI
+
+# Controlli veloci su ogni modifica. Nessun segreto, nessun accesso in scrittura al repository.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  php:
+    name: PHP (sintassi)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: '8.3'
+          coverage: none
+      - name: Controllo la sintassi di ogni file PHP
+        run: find . -name '*.php' -not -path './.git/*' -print0 | xargs -0 -n1 php -l
+
+  javascript:
+    name: JavaScript (sintassi)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+      - name: Controllo la sintassi di ogni file JavaScript
+        run: |
+          set -e
+          for f in js/*.js; do
+            echo "node --check $f"
+            node --check "$f"
+          done
+
+  appinfo:
+    name: info.xml (schema di Nextcloud)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Installo xmllint
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libxml2-utils
+      - name: Valido appinfo/info.xml con lo schema ufficiale
+        run: |
+          set -e
+          curl -fsSL --retry 3 https://apps.nextcloud.com/schema/apps/info.xsd -o "$RUNNER_TEMP/info.xsd"
+          xmllint --noout --schema "$RUNNER_TEMP/info.xsd" appinfo/info.xml
+
+  privacy:
+    name: Dati privati e segreti
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Cerco segreti, indirizzi IP e email nei file
+        run: python3 scripts/check_privacy.py
